@@ -277,6 +277,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
         candidate_ids = assistant_output.sequences
         return candidate_ids, candidate_logits
 
+
 class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
     """
     `CandidateGenerator` class to be used for Universal Assisted Generation (UAD): assisted generation with different tokenizers
@@ -498,7 +499,9 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
             prompt_use_length = new_assistant_ids.shape[1]
             prompt_use = self.prev_assistant_ids[:, -prompt_use_length:]
 
-            discrepancy_length, new_tokens_only, discrepancy_only = self._get_tokens_diag(prompt_use, new_assistant_ids)
+            discrepancy_length, new_tokens_only, discrepancy_only = self._get_tokens_diag(
+                prompt_use, new_assistant_ids
+            )
             assistant_input_ids = self.prev_assistant_ids
 
             if new_tokens_only is not None:
@@ -509,7 +512,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
                     elif discrepancy_length > discrepancy_only.shape[1]:
                         discrepancy_length_diff = discrepancy_length - discrepancy_only.shape[1]
                         assistant_input_ids = assistant_input_ids[:, :-discrepancy_length_diff]
-                        assistant_input_ids[:, -discrepancy_only.shape[1]:] = discrepancy_only
+                        assistant_input_ids[:, -discrepancy_only.shape[1] :] = discrepancy_only
 
                     remove_from_pkv = discrepancy_length
 
@@ -555,6 +558,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
             new_target_ids = new_target_ids[:, : self.generation_config.max_length]
 
         return new_target_ids
+
 
 class AssistantToTargetTranslator:
     """
@@ -797,7 +801,9 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
             "logits_processor": self.logits_processor,
         }
 
-        assistant_output = self.assistant_model.generate(**assistant_generation_kwargs, **self.assistant_kwargs, output_logits=True)
+        assistant_output = self.assistant_model.generate(
+            **assistant_generation_kwargs, **self.assistant_kwargs, output_logits=True
+        )
 
         # 3. Update variables for the next round of candidate generation
         self.assistant_kwargs["past_key_values"] = assistant_output.past_key_values
