@@ -326,11 +326,11 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
 
         self.target_tokenizer = target_tokenizer
         self.assistant_tokenizer = assistant_tokenizer
+        self.prev_target_ids = None
         self.prev_tokens = None
         self.prev_assistant_ids = None
         self.target_lookbehind = assistant_model.generation_config.target_lookbehind
         self.assistant_lookbehind = assistant_model.generation_config.assistant_lookbehind
-        self.prev_target_ids = None
 
     @staticmethod
     def _get_longest_diag_dict(input_matrix, nonzero_idx):
