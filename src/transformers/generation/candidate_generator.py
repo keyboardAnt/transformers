@@ -328,8 +328,8 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         self.assistant_tokenizer = assistant_tokenizer
         self.prev_tokens = None
         self.prev_assistant_ids = None
-        self.target_lookbehind = 10
-        self.assistant_lookbehind = 10
+        self.target_lookbehind = assistant_model.generation_config.target_lookbehind
+        self.assistant_lookbehind = assistant_model.generation_config.assistant_lookbehind
         self.prev_target_ids = None
 
     @staticmethod
