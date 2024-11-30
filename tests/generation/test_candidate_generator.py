@@ -1,8 +1,17 @@
+import gc
+import threading
 import unittest
+import weakref
+from unittest.mock import MagicMock
 
 import numpy as np
+import torch
 
-from transformers.generation.candidate_generator import AssistedCandidateGeneratorDifferentTokenizers
+from transformers.generation.candidate_generator import (
+    AssistantToTargetTranslator,
+    AssistantVocabTranslatorCache,
+    AssistedCandidateGeneratorDifferentTokenizers,
+)
 
 
 class TestAssistedCandidateGeneratorDifferentTokenizers(unittest.TestCase):
@@ -41,16 +50,6 @@ class TestAssistedCandidateGeneratorDifferentTokenizers(unittest.TestCase):
         self.assertEqual(discrep_length, 0)
         np.testing.assert_array_equal(new_tokens_only, np.array([[]]))
         np.testing.assert_array_equal(discrep_only, np.array([[]]))
-
-import gc
-import threading
-import unittest
-import weakref
-from unittest.mock import MagicMock
-
-import torch
-
-from src.transformers.generation.candidate_generator import AssistantToTargetTranslator, AssistantVocabTranslatorCache
 
 
 class TestAssistantToTargetTranslator(unittest.TestCase):
