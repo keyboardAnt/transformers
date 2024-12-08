@@ -621,7 +621,7 @@ class AssistantToTargetTranslator:
         assistant_logits_supported_mask: torch.BoolTensor = assistant_logits > -float("inf")
         assistant_logits_supported_indices: torch.IntTensor = assistant_logits_supported_mask.nonzero(as_tuple=True)[
             -1
-        ]
+        ].cpu()
         target_logits_supported_indices = self._assistant_to_target_input_ids_mapping[assistant_logits_supported_indices].to(device)
         target_logits[..., target_logits_supported_indices] = assistant_logits[..., assistant_logits_supported_mask]
         return target_logits
