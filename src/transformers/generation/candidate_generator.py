@@ -606,8 +606,9 @@ class AssistantToTargetTranslator:
         if i == 0:
             return target_input_ids
         else:
+            device = assistant_candidate_ids.device
             #assert len(assistant_candidate_ids[0]) > assistant_input_ids.shape[1]
-            transformed_slice = self._assistant_to_target_input_ids[assistant_candidate_ids[0, -(len(assistant_candidate_ids[0]) - assistant_input_ids.shape[1]) :]]
+            transformed_slice = self._assistant_to_target_input_ids[assistant_candidate_ids[0, -(len(assistant_candidate_ids[0]) - assistant_input_ids.shape[1]) :].cpu()].to(device)
             #assert torch.all(transformed_slice != -1)
             return torch.cat((target_input_ids, transformed_slice.unsqueeze(0)), dim=1)
 
