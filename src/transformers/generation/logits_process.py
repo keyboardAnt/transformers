@@ -1860,8 +1860,8 @@ class SuppressTokensLogitsProcessor(LogitsProcessor):
     ```
     """
 
-    def __init__(self, suppress_tokens, device: str = "cpu"):
-        self.suppress_tokens = torch.tensor(list(suppress_tokens), device=device)
+    def __init__(self, suppress_tokens):
+        self.suppress_tokens = suppress_tokens
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
