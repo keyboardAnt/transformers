@@ -568,7 +568,7 @@ class AssistantToTargetTranslator:
     def __init__(self, target_tokenizer: "PreTrainedTokenizerBase", assistant_tokenizer: "PreTrainedTokenizerBase"):
         self._target_tokenizer: "PreTrainedTokenizerBase" = target_tokenizer
         self._assistant_tokenizer: "PreTrainedTokenizerBase" = assistant_tokenizer
-        self._assistant_to_target_input_ids: dict[int, int] = self._get_assistant_to_target_input_ids()
+        self._assistant_to_target_input_ids = self._get_assistant_to_target_input_ids()
         self.suppress_input_ids: list[int] = self._get_suppress_input_ids()
         self.logits_processors: LogitsProcessorList = LogitsProcessorList(
             [
@@ -577,22 +577,21 @@ class AssistantToTargetTranslator:
             ]
         )
 
-    def _get_assistant_to_target_input_ids(self) -> dict[int, int]:
-        """
-        Get a mapping from assistant tokens to target tokens based on vocabularies.
-        """
+    def _get_assistant_to_target_input_ids(self):
         target_vocab = self._target_tokenizer.get_vocab()
         assistant_vocab = self._assistant_tokenizer.get_vocab()
-        return {
-            assistant_vocab[tok]: target_vocab[tok] for tok in set(target_vocab.keys()) & set(assistant_vocab.keys())
-        }
-
+        max_assistant_index = max(assistant_vocab.values())
+        assistant_to_target_input_ids = torch.full((max_assistant_index+1,), -1, dtype=int) # -1 means not in target vocab
+        for tok, idx in assistant_vocab.items():
+            if tok in target_vocab:
+                assistant_to_target_input_ids[idx] = target_vocab[tok]
+        return assistant_to_target_input_ids
+    
     def _get_suppress_input_ids(self) -> list[int]:
         """
         Get the input ids that are in the assistant vocab but not in the target vocab.
         """
-        assistant_vocab = self._assistant_tokenizer.get_vocab()
-        return list(set(assistant_vocab.values()) - set(self._assistant_to_target_input_ids.keys()))
+        return torch.where(self._assistant_to_target_input_ids==-1)[0]
 
     def get_target_ids(
         self, assistant_input_ids, target_input_ids, assistant_candidate_ids: torch.LongTensor
@@ -602,14 +601,16 @@ class AssistantToTargetTranslator:
         Note that we have already the target ids for the prompt and we only need to find the target ids for the new tokens.
         Moreover, assistant ids of the original prompt does not necessarily appear in _assistant_to_target_input_ids.
         """
-        device = assistant_candidate_ids.device
-        target_candidate_ids = (
-            assistant_candidate_ids[0, -(len(assistant_candidate_ids[0]) - assistant_input_ids.shape[1]) :]
-            .cpu()
-            .apply_(lambda x: self._assistant_to_target_input_ids.get(x, x))
-            .to(device)
-        )
-        return torch.cat((target_input_ids, target_candidate_ids.unsqueeze(0)), dim=1)
+        
+        i = len(assistant_candidate_ids[0]) - assistant_input_ids.shape[1]
+        if i == 0:
+            return target_input_ids
+        else:
+            device = assistant_candidate_ids.device
+            #assert len(assistant_candidate_ids[0]) > assistant_input_ids.shape[1]
+            transformed_slice = self._assistant_to_target_input_ids[assistant_candidate_ids[0, -(len(assistant_candidate_ids[0]) - assistant_input_ids.shape[1]) :].cpu()].to(device)
+            #assert torch.all(transformed_slice != -1)
+            return torch.cat((target_input_ids, transformed_slice.unsqueeze(0)), dim=1)
 
     def get_target_logits(self, assistant_logits: torch.FloatTensor) -> torch.FloatTensor:
         """
@@ -622,12 +623,8 @@ class AssistantToTargetTranslator:
         assistant_logits_supported_mask: torch.BoolTensor = assistant_logits > -float("inf")
         assistant_logits_supported_indices: torch.IntTensor = assistant_logits_supported_mask.nonzero(as_tuple=True)[
             -1
-        ]
-        target_logits_supported_indices: torch.IntTensor = (
-            assistant_logits_supported_indices.cpu()
-            .apply_(lambda x: self._assistant_to_target_input_ids[x])
-            .to(device)
-        )
+        ].cpu()
+        target_logits_supported_indices = self._assistant_to_target_input_ids[assistant_logits_supported_indices].to(device)
         target_logits[..., target_logits_supported_indices] = assistant_logits[..., assistant_logits_supported_mask]
         return target_logits
 
@@ -708,7 +705,7 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
             logits_processor,
         )
         # Track sequence lengths and previous assistant IDs
-        self._prev_target_seq_len: int = 0
+        self._candidates_target_seq_len: int = 0
         self._prev_assistant_ids: Optional[torch.LongTensor] = None
 
     def get_candidates(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
@@ -732,6 +729,7 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
         generation_args["generation_config"].return_dict_in_generate = True
 
         # Generate and process outputs using translator
+        generation_args['logits_processor'] = self._atm_translator.logits_processors
         assistant_output = self.assistant_model.generate(**generation_args, **self.assistant_kwargs)
         self.assistant_kwargs["past_key_values"] = assistant_output.past_key_values
 
@@ -739,8 +737,9 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
 
         # Use translator to convert tokens and logits
         candidate_ids = assistant_output.sequences
-        candidate_logits = self._atm_translator.logits_processors(input_ids=candidate_ids, scores=candidate_logits)
+        self._prev_assistant_ids = candidate_ids
         target_ids = self._atm_translator.get_target_ids(assistant_input_ids, target_input_ids, candidate_ids)
+        self._candidates_target_seq_len = target_ids.shape[-1]
         target_logits = self._atm_translator.get_target_logits(candidate_logits)
 
         return target_ids, target_logits
@@ -751,9 +750,11 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
         """
         # Calculate new tokens since last call
         target_seq_len = target_input_ids.shape[-1]
-        new_token_count = target_seq_len - self._prev_target_seq_len
+        if self._candidates_target_seq_len == 0:
+            new_token_count = target_seq_len
+        else:
+            new_token_count = 1
         target_new_ids = target_input_ids[:, -new_token_count:]
-        self._prev_target_seq_len = target_seq_len
 
         # Convert only the new tokens
         target_new_text = self.target_tokenizer.batch_decode(
@@ -765,11 +766,15 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
 
         # Update or initialize assistant IDs
         if self._prev_assistant_ids is None:
-            self._prev_assistant_ids = assistant_new_ids
+            assistant_input_ids = assistant_new_ids
         else:
-            self._prev_assistant_ids = torch.cat([self._prev_assistant_ids, assistant_new_ids], dim=-1)
-
-        return self._prev_assistant_ids
+            i = self._candidates_target_seq_len+1-target_seq_len
+            if i > 0:
+                self._prev_assistant_ids = self._prev_assistant_ids[:,:-i]
+            assistant_input_ids = torch.cat([self._prev_assistant_ids, assistant_new_ids], dim=-1)      
+        assistant_input_ids = assistant_input_ids.to(torch.int)
+  
+        return assistant_input_ids
 
 
 class PromptLookupCandidateGenerator(CandidateGenerator):
