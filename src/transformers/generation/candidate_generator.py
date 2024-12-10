@@ -565,9 +565,13 @@ class AssistantToTargetTranslator:
     Translate the assistant into the target universe.
     """
 
-    def __init__(self, target_tokenizer: "PreTrainedTokenizerBase", assistant_tokenizer: "PreTrainedTokenizerBase"):
+    def __init__(self, target_tokenizer: "PreTrainedTokenizerBase", assistant_tokenizer: "PreTrainedTokenizerBase", target_vocab_size: int):
         self._target_tokenizer: "PreTrainedTokenizerBase" = target_tokenizer
         self._assistant_tokenizer: "PreTrainedTokenizerBase" = assistant_tokenizer
+        target_tokenizer_vocab_size: int = len(target_tokenizer.get_vocab())
+        # paddind is required in the case that target_vocab_size is bigger than set(target_tokenizer.get_vocab().keys())
+        if target_tokenizer_vocab_size < target_vocab_size:
+            self._padding_size = target_vocab_size - target_tokenizer_vocab_size
         self._assistant_to_target_input_ids = self._get_assistant_to_target_input_ids()
         self.suppress_input_ids: list[int] = self._get_suppress_input_ids()
         self.logits_processors: LogitsProcessorList = LogitsProcessorList(
@@ -607,9 +611,7 @@ class AssistantToTargetTranslator:
             return target_input_ids
         else:
             device = assistant_candidate_ids.device
-            #assert len(assistant_candidate_ids[0]) > assistant_input_ids.shape[1]
             transformed_slice = self._assistant_to_target_input_ids[assistant_candidate_ids[0, -(len(assistant_candidate_ids[0]) - assistant_input_ids.shape[1]) :].cpu()].to(device)
-            #assert torch.all(transformed_slice != -1)
             return torch.cat((target_input_ids, transformed_slice.unsqueeze(0)), dim=1)
 
     def get_target_logits(self, assistant_logits: torch.FloatTensor) -> torch.FloatTensor:
@@ -626,6 +628,9 @@ class AssistantToTargetTranslator:
         ].cpu()
         target_logits_supported_indices = self._assistant_to_target_input_ids[assistant_logits_supported_indices].to(device)
         target_logits[..., target_logits_supported_indices] = assistant_logits[..., assistant_logits_supported_mask]
+        if hasattr(self, '_padding_size'):
+            padding = torch.full((target_logits.size(0), target_logits.size(1), self._padding_size), 0.0).to(device)
+            target_logits = torch.cat((target_logits, padding), dim=2)
         return target_logits
 
 
@@ -640,7 +645,7 @@ class AssistantVocabTranslatorCache:
 
     @classmethod
     def get_translator(
-        cls, target_tokenizer: "PreTrainedTokenizerBase", assistant_tokenizer: "PreTrainedTokenizerBase"
+        cls, target_tokenizer: "PreTrainedTokenizerBase", assistant_tokenizer: "PreTrainedTokenizerBase", target_vocab_size: int
     ) -> AssistantToTargetTranslator:
         with cls._lock:
             assistant_dict = cls._cache.get(target_tokenizer)
@@ -650,7 +655,7 @@ class AssistantVocabTranslatorCache:
 
             mapping = assistant_dict.get(assistant_tokenizer)
             if mapping is None:
-                mapping = AssistantToTargetTranslator(target_tokenizer, assistant_tokenizer)
+                mapping = AssistantToTargetTranslator(target_tokenizer, assistant_tokenizer, target_vocab_size)
                 assistant_dict[assistant_tokenizer] = mapping
 
             return mapping
@@ -689,11 +694,12 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
         assistant_tokenizer: "PreTrainedTokenizerBase",
         generation_config: "GenerationConfig",
         model_kwargs: Dict,
+        target_vocab_size: int,
         inputs_tensor: Optional[torch.Tensor] = None,
         logits_processor: "LogitsProcessorList" = None,
     ):
         # Initialize translator before parent class
-        self._atm_translator = AssistantVocabTranslatorCache.get_translator(target_tokenizer, assistant_tokenizer)
+        self._atm_translator = AssistantVocabTranslatorCache.get_translator(target_tokenizer, assistant_tokenizer, target_vocab_size)
         super().__init__(
             input_ids,
             assistant_model,
@@ -707,6 +713,7 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
         # Track sequence lengths and previous assistant IDs
         self._candidates_target_seq_len: int = 0
         self._prev_assistant_ids: Optional[torch.LongTensor] = None
+        self.target_vocab_size = target_vocab_size
 
     def get_candidates(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
         """
