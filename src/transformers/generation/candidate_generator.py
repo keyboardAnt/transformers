@@ -576,8 +576,7 @@ class AssistantToTargetTranslator:
         self.suppress_input_ids: list[int] = self._get_suppress_input_ids()
         self.logits_processors: LogitsProcessorList = LogitsProcessorList(
             [
-                SuppressTokensLogitsProcessor(self.suppress_input_ids),
-                LogitNormalization(),
+                SuppressTokensLogitsProcessor(self.suppress_input_ids)
             ]
         )
 
@@ -629,7 +628,7 @@ class AssistantToTargetTranslator:
         target_logits_supported_indices = self._assistant_to_target_input_ids[assistant_logits_supported_indices].to(device)
         target_logits[..., target_logits_supported_indices] = assistant_logits[..., assistant_logits_supported_mask]
         if hasattr(self, '_padding_size'):
-            padding = torch.full((target_logits.size(0), target_logits.size(1), self._padding_size), 0.0).to(device)
+            padding = torch.full((target_logits.size(0), target_logits.size(1), self._padding_size), -float("inf")).to(device)
             target_logits = torch.cat((target_logits, padding), dim=2)
         return target_logits
 
