@@ -24,7 +24,6 @@ import torch
 from ..cache_utils import DynamicCache
 from ..pytorch_utils import isin_mps_friendly
 from .logits_process import (
-    LogitNormalization,
     LogitsProcessorList,
     MinLengthLogitsProcessor,
     SuppressTokensLogitsProcessor,
@@ -573,10 +572,10 @@ class AssistantToTargetTranslator:
         if target_tokenizer_vocab_size < target_vocab_size:
             self._padding_size = target_vocab_size - target_tokenizer_vocab_size
         self._assistant_to_target_input_ids = self._get_assistant_to_target_input_ids()
-        self.suppress_input_ids: list[int] = self._get_suppress_input_ids()
+        self._suppress_input_ids: list[int] = self._get_suppress_input_ids()
         self.logits_processors: LogitsProcessorList = LogitsProcessorList(
             [
-                SuppressTokensLogitsProcessor(self.suppress_input_ids)
+                SuppressTokensLogitsProcessor(self._suppress_input_ids)
             ]
         )
 
@@ -710,7 +709,7 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
             logits_processor,
         )
         # Track sequence lengths and previous assistant IDs
-        self._candidates_target_seq_len: int = 0
+        self._target_seq_len_with_candidates: int = 0
         self._prev_assistant_ids: Optional[torch.LongTensor] = None
         self.target_vocab_size = target_vocab_size
 
@@ -742,10 +741,9 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
         candidate_logits = torch.stack(assistant_output.scores, dim=1)
 
         # Use translator to convert tokens and logits
-        candidate_ids = assistant_output.sequences
-        self._prev_assistant_ids = candidate_ids
-        target_ids = self._atm_translator.get_target_ids(assistant_input_ids, target_input_ids, candidate_ids)
-        self._candidates_target_seq_len = target_ids.shape[-1]
+        self._prev_assistant_ids = assistant_output.sequences
+        target_ids = self._atm_translator.get_target_ids(assistant_input_ids, target_input_ids, self._prev_assistant_ids)
+        self._target_seq_len_with_candidates = target_ids.shape[-1]
         target_logits = self._atm_translator.get_target_logits(candidate_logits)
 
         return target_ids, target_logits
@@ -756,7 +754,7 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
         """
         # Calculate new tokens since last call
         target_seq_len = target_input_ids.shape[-1]
-        if self._candidates_target_seq_len == 0:
+        if self._target_seq_len_with_candidates == 0:
             new_token_count = target_seq_len
         else:
             new_token_count = 1
@@ -774,9 +772,10 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
         if self._prev_assistant_ids is None:
             assistant_input_ids = assistant_new_ids
         else:
-            i = self._candidates_target_seq_len+1-target_seq_len
-            if i > 0:
-                self._prev_assistant_ids = self._prev_assistant_ids[:,:-i]
+            tokens_to_remove = self._target_seq_len_with_candidates+1-target_seq_len
+            # If the number of new tokens is greater than zero, truncate the previous assistant IDs
+            if tokens_to_remove > 0:
+                self._prev_assistant_ids = self._prev_assistant_ids[:,:-tokens_to_remove]
             assistant_input_ids = torch.cat([self._prev_assistant_ids, assistant_new_ids], dim=-1)      
         assistant_input_ids = assistant_input_ids.to(torch.int)
   
