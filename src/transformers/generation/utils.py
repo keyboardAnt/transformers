@@ -858,6 +858,7 @@ class GenerationMixin:
                         logits_processor=logits_processor,
                         target_tokenizer=target_tokenizer,
                         assistant_tokenizer=assistant_tokenizer,
+                        target_vocab_size=self.config.vocab_size # required in the case that self.config.vocab_size is different from the length of target_tokenizer.get_vocab()
                     )
                 case False:
                     candidate_generator = AssistedCandidateGeneratorDifferentTokenizers(
