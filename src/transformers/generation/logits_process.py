@@ -1860,15 +1860,14 @@ class SuppressTokensLogitsProcessor(LogitsProcessor):
     ```
     """
 
-    def __init__(self, suppress_tokens):
-        self.suppress_tokens = suppress_tokens
+    def __init__(self, suppress_tokens, assistant_vocab_size, assistant_model_device):
+        suppress_tokens = suppress_tokens
+        vocab_tensor = torch.arange(assistant_vocab_size, device=assistant_model_device)
+        self.suppress_token_mask = isin_mps_friendly(vocab_tensor, suppress_tokens)
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
-        suppress_token_mask = isin_mps_friendly(vocab_tensor, self.suppress_tokens.to(scores.device))
-        scores = torch.where(suppress_token_mask, -float("inf"), scores)
-        return scores
+        return scores.masked_fill_(self.suppress_token_mask, -float("inf"))
 
 
 class WhisperTimeStampLogitsProcessor(LogitsProcessor):

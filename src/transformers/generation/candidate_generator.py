@@ -564,9 +564,11 @@ class AssistantToTargetTranslator:
     Translate the assistant into the target universe.
     """
 
-    def __init__(self, target_tokenizer: "PreTrainedTokenizerBase", assistant_tokenizer: "PreTrainedTokenizerBase", target_vocab_size: int):
+    def __init__(self, target_tokenizer: "PreTrainedTokenizerBase", assistant_tokenizer: "PreTrainedTokenizerBase", assistant_model_device, target_vocab_size: int, 
+                 assistant_vocab_size:int):
         self._target_tokenizer: "PreTrainedTokenizerBase" = target_tokenizer
         self._assistant_tokenizer: "PreTrainedTokenizerBase" = assistant_tokenizer
+        self.assistant_model_device = assistant_model_device
         target_tokenizer_vocab_size: int = len(target_tokenizer.get_vocab())
         # paddind is required in the case that target_vocab_size is bigger than set(target_tokenizer.get_vocab().keys())
         if target_tokenizer_vocab_size < target_vocab_size:
@@ -575,7 +577,7 @@ class AssistantToTargetTranslator:
         self._suppress_input_ids: list[int] = self._get_suppress_input_ids()
         self.logits_processors: LogitsProcessorList = LogitsProcessorList(
             [
-                SuppressTokensLogitsProcessor(self._suppress_input_ids)
+                SuppressTokensLogitsProcessor(self._suppress_input_ids, assistant_vocab_size, self.assistant_model_device)
             ]
         )
 
@@ -587,7 +589,7 @@ class AssistantToTargetTranslator:
         for tok, idx in assistant_vocab.items():
             if tok in target_vocab:
                 assistant_to_target_input_ids[idx] = target_vocab[tok]
-        return assistant_to_target_input_ids
+        return assistant_to_target_input_ids.to(self.assistant_model_device)
     
     def _get_suppress_input_ids(self) -> list[int]:
         """
@@ -604,30 +606,28 @@ class AssistantToTargetTranslator:
         Moreover, assistant ids of the original prompt does not necessarily appear in _assistant_to_target_input_ids.
         """
         
-        i = len(assistant_candidate_ids[0]) - assistant_input_ids.shape[1]
-        if i == 0:
+        num_new_tokens = len(assistant_candidate_ids[0]) - assistant_input_ids.shape[1]
+        if num_new_tokens == 0:
             return target_input_ids
         else:
-            device = assistant_candidate_ids.device
-            transformed_slice = self._assistant_to_target_input_ids[assistant_candidate_ids[0, -(len(assistant_candidate_ids[0]) - assistant_input_ids.shape[1]) :].cpu()].to(device)
+            transformed_slice = self._assistant_to_target_input_ids[assistant_candidate_ids[0, -num_new_tokens :]]
             return torch.cat((target_input_ids, transformed_slice.unsqueeze(0)), dim=1)
 
     def get_target_logits(self, assistant_logits: torch.FloatTensor) -> torch.FloatTensor:
         """
         Return the target logits that correspond to the assistant logits.
         """
-        device = assistant_logits.device
         target_vocab_size: int = len(self._target_tokenizer.get_vocab())
         target_shape: tuple[int, ...] = (*assistant_logits.shape[:-1], target_vocab_size)
-        target_logits: torch.FloatTensor = torch.full(target_shape, -float("inf")).to(device)
+        target_logits: torch.FloatTensor = torch.full(target_shape, -float("inf")).to(self.assistant_model_device)
         assistant_logits_supported_mask: torch.BoolTensor = assistant_logits > -float("inf")
         assistant_logits_supported_indices: torch.IntTensor = assistant_logits_supported_mask.nonzero(as_tuple=True)[
             -1
-        ].cpu()
-        target_logits_supported_indices = self._assistant_to_target_input_ids[assistant_logits_supported_indices].to(device)
+        ]
+        target_logits_supported_indices = self._assistant_to_target_input_ids[assistant_logits_supported_indices]
         target_logits[..., target_logits_supported_indices] = assistant_logits[..., assistant_logits_supported_mask]
         if hasattr(self, '_padding_size'):
-            padding = torch.full((target_logits.size(0), target_logits.size(1), self._padding_size), -float("inf")).to(device)
+            padding = torch.full((target_logits.size(0), target_logits.size(1), self._padding_size), -float("inf")).to(self.assistant_model_device)
             target_logits = torch.cat((target_logits, padding), dim=2)
         return target_logits
 
@@ -643,7 +643,7 @@ class AssistantVocabTranslatorCache:
 
     @classmethod
     def get_translator(
-        cls, target_tokenizer: "PreTrainedTokenizerBase", assistant_tokenizer: "PreTrainedTokenizerBase", target_vocab_size: int
+        cls, target_tokenizer: "PreTrainedTokenizerBase", assistant_tokenizer: "PreTrainedTokenizerBase", assistant_model_device, target_vocab_size: int, assistant_vocab_size: int
     ) -> AssistantToTargetTranslator:
         with cls._lock:
             assistant_dict = cls._cache.get(target_tokenizer)
@@ -653,7 +653,7 @@ class AssistantVocabTranslatorCache:
 
             mapping = assistant_dict.get(assistant_tokenizer)
             if mapping is None:
-                mapping = AssistantToTargetTranslator(target_tokenizer, assistant_tokenizer, target_vocab_size)
+                mapping = AssistantToTargetTranslator(target_tokenizer, assistant_tokenizer, assistant_model_device, target_vocab_size, assistant_vocab_size)
                 assistant_dict[assistant_tokenizer] = mapping
 
             return mapping
@@ -697,7 +697,8 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
         logits_processor: "LogitsProcessorList" = None,
     ):
         # Initialize translator before parent class
-        self._atm_translator = AssistantVocabTranslatorCache.get_translator(target_tokenizer, assistant_tokenizer, target_vocab_size)
+        self._atm_translator = AssistantVocabTranslatorCache.get_translator(target_tokenizer, assistant_tokenizer, assistant_model.device, 
+                                                                            target_vocab_size, assistant_model.config.vocab_size)
         super().__init__(
             input_ids,
             assistant_model,
