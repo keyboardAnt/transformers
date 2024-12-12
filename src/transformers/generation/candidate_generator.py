@@ -626,11 +626,11 @@ class AssistantToTargetTranslator:
 
         target_shape: tuple[int, ...] = (*assistant_logits.shape[:-1], self.target_vocab_size)
         target_logits: torch.FloatTensor = torch.full(target_shape, -float("inf")).to(self._assistant_model_device)
-        assistant_indices = self._assistant_to_target_input_ids != -1  # Mask for valid indices
-        target_indices = self._assistant_to_target_input_ids[assistant_indices]  # Exclude invalid indices
+        assistant_indices_mask = self._assistant_to_target_input_ids != -1  # Mask for valid indices
+        target_logits_supported_indices = self._assistant_to_target_input_ids[assistant_indices_mask]  # Exclude invalid indices
         valid_assistant_logits = assistant_logits[..., :self._assistant_to_target_input_ids.shape[0]]
 
-        target_logits[..., target_indices] = valid_assistant_logits[..., assistant_indices]
+        target_logits[..., target_logits_supported_indices] = valid_assistant_logits[..., assistant_indices_mask]
 
         # assistant_logits_supported_mask: torch.BoolTensor = assistant_logits > -float("inf")
         # assistant_logits_supported_indices: torch.IntTensor = assistant_logits_supported_mask.nonzero(as_tuple=True)[
