@@ -641,7 +641,7 @@ class AssistantToTargetTranslator:
             )
             if self._target_tokenizer.padding_side == "right":
                 target_logits = torch.cat((target_logits, padding), dim=2)
-            elif self._padding_side == "left":
+            elif self._target_tokenizer.padding_side == "left":
                 target_logits = torch.cat((padding, target_logits), dim=2)
         return target_logits
 
