@@ -639,10 +639,11 @@ class AssistantToTargetTranslator:
             padding = torch.full((target_logits.size(0), target_logits.size(1), self._padding_size), -float("inf")).to(
                 self._assistant_model_device
             )
-            if self._target_tokenizer.padding_side == "right":
-                target_logits = torch.cat((target_logits, padding), dim=2)
-            elif self._target_tokenizer.padding_side == "left":
-                target_logits = torch.cat((padding, target_logits), dim=2)
+            padding_side_actions = {
+                "right": lambda: torch.cat((target_logits, padding), dim=2),
+                "left": lambda: torch.cat((padding, target_logits), dim=2)
+            }
+            target_logits = padding_side_actions.get(self._target_tokenizer.padding_side, lambda: target_logits)()
         return target_logits
 
 
