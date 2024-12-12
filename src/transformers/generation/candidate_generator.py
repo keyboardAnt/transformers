@@ -564,20 +564,27 @@ class AssistantToTargetTranslator:
     Translate the assistant into the target universe.
     """
 
-    def __init__(self, target_tokenizer: "PreTrainedTokenizerBase", assistant_tokenizer: "PreTrainedTokenizerBase", assistant_model_device, target_vocab_size: int, 
-                 assistant_vocab_size:int):
+    def __init__(
+        self,
+        target_tokenizer: "PreTrainedTokenizerBase",
+        assistant_tokenizer: "PreTrainedTokenizerBase",
+        assistant_model_device,
+        target_vocab_size: int,
+        assistant_vocab_size: int,
+    ):
         self._target_tokenizer: "PreTrainedTokenizerBase" = target_tokenizer
         self._assistant_tokenizer: "PreTrainedTokenizerBase" = assistant_tokenizer
-        self.assistant_model_device = assistant_model_device
-        target_tokenizer_vocab_size: int = len(target_tokenizer.get_vocab())
+        self._assistant_model_device = assistant_model_device
+        target_tokenizer_vocab_size: int = len(target_tokenizer)
         # paddind is required in the case that target_vocab_size is bigger than set(target_tokenizer.get_vocab().keys())
         if target_tokenizer_vocab_size < target_vocab_size:
             self._padding_size = target_vocab_size - target_tokenizer_vocab_size
         self._assistant_to_target_input_ids = self._get_assistant_to_target_input_ids()
-        self._suppress_input_ids: list[int] = self._get_suppress_input_ids()
         self.logits_processors: LogitsProcessorList = LogitsProcessorList(
             [
-                SuppressTokensLogitsProcessor(self._suppress_input_ids, assistant_vocab_size, self.assistant_model_device)
+                SuppressTokensLogitsProcessor(
+                    self._get_mapped_input_ids(), assistant_vocab_size, self._assistant_model_device
+                )
             ]
         )
 
@@ -585,17 +592,19 @@ class AssistantToTargetTranslator:
         target_vocab = self._target_tokenizer.get_vocab()
         assistant_vocab = self._assistant_tokenizer.get_vocab()
         max_assistant_index = max(assistant_vocab.values())
-        assistant_to_target_input_ids = torch.full((max_assistant_index+1,), -1, dtype=int) # -1 means not in target vocab
+        assistant_to_target_input_ids = torch.full(
+            (max_assistant_index + 1,), -1, dtype=int
+        )  # -1 means not in target vocab
         for tok, idx in assistant_vocab.items():
             if tok in target_vocab:
                 assistant_to_target_input_ids[idx] = target_vocab[tok]
-        return assistant_to_target_input_ids.to(self.assistant_model_device)
-    
-    def _get_suppress_input_ids(self) -> list[int]:
+        return assistant_to_target_input_ids.to(self._assistant_model_device)
+
+    def _get_mapped_input_ids(self) -> list[int]:
         """
-        Get the input ids that are in the assistant vocab but not in the target vocab.
+        Get the input ids that are both in the assistant vocab and in the target vocab.
         """
-        return torch.where(self._assistant_to_target_input_ids==-1)[0]
+        return torch.where(self._assistant_to_target_input_ids != -1)[0]
 
     def get_target_ids(
         self, assistant_input_ids, target_input_ids, assistant_candidate_ids: torch.LongTensor
@@ -605,30 +614,35 @@ class AssistantToTargetTranslator:
         Note that we have already the target ids for the prompt and we only need to find the target ids for the new tokens.
         Moreover, assistant ids of the original prompt does not necessarily appear in _assistant_to_target_input_ids.
         """
-        
+
         num_new_tokens = len(assistant_candidate_ids[0]) - assistant_input_ids.shape[1]
         if num_new_tokens == 0:
             return target_input_ids
         else:
-            transformed_slice = self._assistant_to_target_input_ids[assistant_candidate_ids[0, -num_new_tokens :]]
+            transformed_slice = self._assistant_to_target_input_ids[assistant_candidate_ids[0, -num_new_tokens:]]
             return torch.cat((target_input_ids, transformed_slice.unsqueeze(0)), dim=1)
 
     def get_target_logits(self, assistant_logits: torch.FloatTensor) -> torch.FloatTensor:
         """
         Return the target logits that correspond to the assistant logits.
         """
-        target_vocab_size: int = len(self._target_tokenizer.get_vocab())
+        target_vocab_size: int = len(self._target_tokenizer)
         target_shape: tuple[int, ...] = (*assistant_logits.shape[:-1], target_vocab_size)
-        target_logits: torch.FloatTensor = torch.full(target_shape, -float("inf")).to(self.assistant_model_device)
+        target_logits: torch.FloatTensor = torch.full(target_shape, -float("inf")).to(self._assistant_model_device)
         assistant_logits_supported_mask: torch.BoolTensor = assistant_logits > -float("inf")
         assistant_logits_supported_indices: torch.IntTensor = assistant_logits_supported_mask.nonzero(as_tuple=True)[
             -1
         ]
         target_logits_supported_indices = self._assistant_to_target_input_ids[assistant_logits_supported_indices]
         target_logits[..., target_logits_supported_indices] = assistant_logits[..., assistant_logits_supported_mask]
-        if hasattr(self, '_padding_size'):
-            padding = torch.full((target_logits.size(0), target_logits.size(1), self._padding_size), -float("inf")).to(self.assistant_model_device)
-            target_logits = torch.cat((target_logits, padding), dim=2)
+        if hasattr(self, "_padding_size"):
+            padding = torch.full((target_logits.size(0), target_logits.size(1), self._padding_size), -float("inf")).to(
+                self._assistant_model_device
+            )
+            if self._target_tokenizer.padding_side == "right":
+                target_logits = torch.cat((target_logits, padding), dim=2)
+            elif self._padding_side == "left":
+                target_logits = torch.cat((padding, target_logits), dim=2)
         return target_logits
 
 
@@ -643,7 +657,12 @@ class AssistantVocabTranslatorCache:
 
     @classmethod
     def get_translator(
-        cls, target_tokenizer: "PreTrainedTokenizerBase", assistant_tokenizer: "PreTrainedTokenizerBase", assistant_model_device, target_vocab_size: int, assistant_vocab_size: int
+        cls,
+        target_tokenizer: "PreTrainedTokenizerBase",
+        assistant_tokenizer: "PreTrainedTokenizerBase",
+        assistant_model_device,
+        target_vocab_size: int,
+        assistant_vocab_size: int,
     ) -> AssistantToTargetTranslator:
         with cls._lock:
             assistant_dict = cls._cache.get(target_tokenizer)
@@ -653,7 +672,13 @@ class AssistantVocabTranslatorCache:
 
             mapping = assistant_dict.get(assistant_tokenizer)
             if mapping is None:
-                mapping = AssistantToTargetTranslator(target_tokenizer, assistant_tokenizer, assistant_model_device, target_vocab_size, assistant_vocab_size)
+                mapping = AssistantToTargetTranslator(
+                    target_tokenizer,
+                    assistant_tokenizer,
+                    assistant_model_device,
+                    target_vocab_size,
+                    assistant_vocab_size,
+                )
                 assistant_dict[assistant_tokenizer] = mapping
 
             return mapping
@@ -697,8 +722,13 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
         logits_processor: "LogitsProcessorList" = None,
     ):
         # Initialize translator before parent class
-        self._atm_translator = AssistantVocabTranslatorCache.get_translator(target_tokenizer, assistant_tokenizer, assistant_model.device, 
-                                                                            target_vocab_size, assistant_model.config.vocab_size)
+        self._atm_translator = AssistantVocabTranslatorCache.get_translator(
+            target_tokenizer,
+            assistant_tokenizer,
+            assistant_model.device,
+            target_vocab_size,
+            assistant_model.config.vocab_size,
+        )
         super().__init__(
             input_ids,
             assistant_model,
@@ -735,7 +765,7 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
         generation_args["generation_config"].return_dict_in_generate = True
 
         # Generate and process outputs using translator
-        generation_args['logits_processor'] = self._atm_translator.logits_processors
+        generation_args["logits_processor"] = self._atm_translator.logits_processors
         assistant_output = self.assistant_model.generate(**generation_args, **self.assistant_kwargs)
         self.assistant_kwargs["past_key_values"] = assistant_output.past_key_values
 
@@ -743,7 +773,9 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
 
         # Use translator to convert tokens and logits
         self._prev_assistant_ids = assistant_output.sequences
-        target_ids = self._atm_translator.get_target_ids(assistant_input_ids, target_input_ids, self._prev_assistant_ids)
+        target_ids = self._atm_translator.get_target_ids(
+            assistant_input_ids, target_input_ids, self._prev_assistant_ids
+        )
         self._target_seq_len_with_candidates = target_ids.shape[-1]
         target_logits = self._atm_translator.get_target_logits(candidate_logits)
 
@@ -773,13 +805,13 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
         if self._prev_assistant_ids is None:
             assistant_input_ids = assistant_new_ids
         else:
-            tokens_to_remove = self._target_seq_len_with_candidates+1-target_seq_len
+            tokens_to_remove = self._target_seq_len_with_candidates + 1 - target_seq_len
             # If the number of new tokens is greater than zero, truncate the previous assistant IDs
             if tokens_to_remove > 0:
-                self._prev_assistant_ids = self._prev_assistant_ids[:,:-tokens_to_remove]
-            assistant_input_ids = torch.cat([self._prev_assistant_ids, assistant_new_ids], dim=-1)      
+                self._prev_assistant_ids = self._prev_assistant_ids[:, :-tokens_to_remove]
+            assistant_input_ids = torch.cat([self._prev_assistant_ids, assistant_new_ids], dim=-1)
         assistant_input_ids = assistant_input_ids.to(torch.int)
-  
+
         return assistant_input_ids
 
 
