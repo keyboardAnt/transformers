@@ -575,10 +575,7 @@ class AssistantToTargetTranslator:
         self._target_tokenizer: "PreTrainedTokenizerBase" = target_tokenizer
         self._assistant_tokenizer: "PreTrainedTokenizerBase" = assistant_tokenizer
         self._assistant_model_device = assistant_model_device
-        target_tokenizer_vocab_size: int = len(target_tokenizer)
-        # paddind is required in the case that target_vocab_size is bigger than set(target_tokenizer.get_vocab().keys())
-        if target_tokenizer_vocab_size < target_vocab_size:
-            self._padding_size = target_vocab_size - target_tokenizer_vocab_size
+        self.target_vocab_size: int = target_vocab_size
         self._assistant_to_target_input_ids = self._get_assistant_to_target_input_ids()
         self.logits_processors: LogitsProcessorList = LogitsProcessorList(
             [
@@ -626,24 +623,30 @@ class AssistantToTargetTranslator:
         """
         Return the target logits that correspond to the assistant logits.
         """
-        target_vocab_size: int = len(self._target_tokenizer)
-        target_shape: tuple[int, ...] = (*assistant_logits.shape[:-1], target_vocab_size)
+
+        target_shape: tuple[int, ...] = (*assistant_logits.shape[:-1], self.target_vocab_size)
         target_logits: torch.FloatTensor = torch.full(target_shape, -float("inf")).to(self._assistant_model_device)
-        assistant_logits_supported_mask: torch.BoolTensor = assistant_logits > -float("inf")
-        assistant_logits_supported_indices: torch.IntTensor = assistant_logits_supported_mask.nonzero(as_tuple=True)[
-            -1
-        ]
-        target_logits_supported_indices = self._assistant_to_target_input_ids[assistant_logits_supported_indices]
-        target_logits[..., target_logits_supported_indices] = assistant_logits[..., assistant_logits_supported_mask]
-        if hasattr(self, "_padding_size"):
-            padding = torch.full((target_logits.size(0), target_logits.size(1), self._padding_size), -float("inf")).to(
-                self._assistant_model_device
-            )
-            padding_side_actions = {
-                "right": lambda: torch.cat((target_logits, padding), dim=2),
-                "left": lambda: torch.cat((padding, target_logits), dim=2)
-            }
-            target_logits = padding_side_actions.get(self._target_tokenizer.padding_side, lambda: target_logits)()
+        assistant_indices = self._assistant_to_target_input_ids != -1  # Mask for valid indices
+        target_indices = self._assistant_to_target_input_ids[assistant_indices]  # Exclude invalid indices
+        valid_assistant_logits = assistant_logits[..., :self._assistant_to_target_input_ids.shape[0]]
+
+        target_logits[..., target_indices] = valid_assistant_logits[..., assistant_indices]
+
+        # assistant_logits_supported_mask: torch.BoolTensor = assistant_logits > -float("inf")
+        # assistant_logits_supported_indices: torch.IntTensor = assistant_logits_supported_mask.nonzero(as_tuple=True)[
+        #     -1
+        # ]
+        # target_logits_supported_indices = self._assistant_to_target_input_ids[assistant_logits_supported_indices]
+        # target_logits[..., target_logits_supported_indices] = assistant_logits[..., assistant_logits_supported_mask]
+        # if hasattr(self, "_padding_size"):
+        #     padding = torch.full((target_logits.size(0), target_logits.size(1), self._padding_size), -float("inf")).to(
+        #         self._assistant_model_device
+        #     )
+        #     padding_side_actions = {
+        #         "right": lambda: torch.cat((target_logits, padding), dim=2),
+        #         "left": lambda: torch.cat((padding, target_logits), dim=2)
+        #     }
+        #     target_logits = padding_side_actions.get(self._target_tokenizer.padding_side, lambda: target_logits)()
         return target_logits
 
 
