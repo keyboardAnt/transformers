@@ -626,27 +626,14 @@ class AssistantToTargetTranslator:
 
         target_shape: tuple[int, ...] = (*assistant_logits.shape[:-1], self.target_vocab_size)
         target_logits: torch.FloatTensor = torch.full(target_shape, -float("inf")).to(self._assistant_model_device)
-        assistant_indices_mask = self._assistant_to_target_input_ids != -1  # Mask for valid indices
-        target_logits_supported_indices = self._assistant_to_target_input_ids[assistant_indices_mask]  # Exclude invalid indices
+        # Mask for valid indices
+        assistant_indices_mask = self._assistant_to_target_input_ids != -1  
+        # Exclude invalid indices
+        target_logits_supported_indices = self._assistant_to_target_input_ids[assistant_indices_mask]  
         valid_assistant_logits = assistant_logits[..., :self._assistant_to_target_input_ids.shape[0]]
 
         target_logits[..., target_logits_supported_indices] = valid_assistant_logits[..., assistant_indices_mask]
 
-        # assistant_logits_supported_mask: torch.BoolTensor = assistant_logits > -float("inf")
-        # assistant_logits_supported_indices: torch.IntTensor = assistant_logits_supported_mask.nonzero(as_tuple=True)[
-        #     -1
-        # ]
-        # target_logits_supported_indices = self._assistant_to_target_input_ids[assistant_logits_supported_indices]
-        # target_logits[..., target_logits_supported_indices] = assistant_logits[..., assistant_logits_supported_mask]
-        # if hasattr(self, "_padding_size"):
-        #     padding = torch.full((target_logits.size(0), target_logits.size(1), self._padding_size), -float("inf")).to(
-        #         self._assistant_model_device
-        #     )
-        #     padding_side_actions = {
-        #         "right": lambda: torch.cat((target_logits, padding), dim=2),
-        #         "left": lambda: torch.cat((padding, target_logits), dim=2)
-        #     }
-        #     target_logits = padding_side_actions.get(self._target_tokenizer.padding_side, lambda: target_logits)()
         return target_logits
 
 
