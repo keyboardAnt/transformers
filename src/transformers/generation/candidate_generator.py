@@ -571,16 +571,20 @@ class AssistantToTargetTranslator:
         assistant_model_device,
         target_vocab_size: int,
         assistant_vocab_size: int,
+        filter_value: float = -float("Inf"),
+        suppress_tokens_id: int = -1
     ):
         self._target_tokenizer: "PreTrainedTokenizerBase" = target_tokenizer
         self._assistant_tokenizer: "PreTrainedTokenizerBase" = assistant_tokenizer
         self._assistant_model_device = assistant_model_device
         self.target_vocab_size: int = target_vocab_size
+        self.filter_value: float = filter_value
+        self.suppress_tokens_id: int = suppress_tokens_id
         self._assistant_to_target_input_ids = self._get_assistant_to_target_input_ids()
         self.logits_processors: LogitsProcessorList = LogitsProcessorList(
             [
                 SuppressTokensLogitsProcessor(
-                    self._get_mapped_input_ids(), assistant_vocab_size, self._assistant_model_device
+                    self._get_mapped_input_ids(), assistant_vocab_size, self._assistant_model_device, self.filter_value 
                 )
             ]
         )
@@ -590,8 +594,8 @@ class AssistantToTargetTranslator:
         assistant_vocab = self._assistant_tokenizer.get_vocab()
         max_assistant_index = max(assistant_vocab.values())
         assistant_to_target_input_ids = torch.full(
-            (max_assistant_index + 1,), -1, dtype=int
-        )  # -1 means not in target vocab
+            (max_assistant_index + 1,), self.suppress_tokens_id, dtype=int
+        )  
         for tok, idx in assistant_vocab.items():
             if tok in target_vocab:
                 assistant_to_target_input_ids[idx] = target_vocab[tok]
@@ -601,7 +605,7 @@ class AssistantToTargetTranslator:
         """
         Get the input ids that are both in the assistant vocab and in the target vocab.
         """
-        return torch.where(self._assistant_to_target_input_ids != -1)[0]
+        return torch.where(self._assistant_to_target_input_ids != self.suppress_tokens_id)[0]
 
     def get_target_ids(
         self, assistant_input_ids, target_input_ids, assistant_candidate_ids: torch.LongTensor
@@ -625,9 +629,9 @@ class AssistantToTargetTranslator:
         """
 
         target_shape: tuple[int, ...] = (*assistant_logits.shape[:-1], self.target_vocab_size)
-        target_logits: torch.FloatTensor = torch.full(target_shape, -float("inf")).to(self._assistant_model_device)
+        target_logits: torch.FloatTensor = torch.full(target_shape, self.filter_value).to(self._assistant_model_device)
         # Mask for valid indices
-        assistant_indices_mask = self._assistant_to_target_input_ids != -1  
+        assistant_indices_mask = self._assistant_to_target_input_ids != self.suppress_tokens_id  
         # Exclude invalid indices
         target_logits_supported_indices = self._assistant_to_target_input_ids[assistant_indices_mask]  
         valid_assistant_logits = assistant_logits[..., :self._assistant_to_target_input_ids.shape[0]]
