@@ -572,7 +572,7 @@ class AssistantToTargetTranslator:
         target_vocab_size: int,
         assistant_vocab_size: int,
         filter_value: float = -float("Inf"),
-        suppress_tokens_id: int = -1
+        suppress_tokens_id: int = -1,
     ):
         self._target_tokenizer: "PreTrainedTokenizerBase" = target_tokenizer
         self._assistant_tokenizer: "PreTrainedTokenizerBase" = assistant_tokenizer
@@ -584,7 +584,7 @@ class AssistantToTargetTranslator:
         self.logits_processors: LogitsProcessorList = LogitsProcessorList(
             [
                 SuppressTokensLogitsProcessor(
-                    self._get_mapped_input_ids(), assistant_vocab_size, self._assistant_model_device, self.filter_value 
+                    self._get_mapped_input_ids(), assistant_vocab_size, self._assistant_model_device, self.filter_value
                 )
             ]
         )
@@ -593,9 +593,7 @@ class AssistantToTargetTranslator:
         target_vocab = self._target_tokenizer.get_vocab()
         assistant_vocab = self._assistant_tokenizer.get_vocab()
         max_assistant_index = max(assistant_vocab.values())
-        assistant_to_target_input_ids = torch.full(
-            (max_assistant_index + 1,), self.suppress_tokens_id, dtype=int
-        )  
+        assistant_to_target_input_ids = torch.full((max_assistant_index + 1,), self.suppress_tokens_id, dtype=int)
         for tok, idx in assistant_vocab.items():
             if tok in target_vocab:
                 assistant_to_target_input_ids[idx] = target_vocab[tok]
@@ -631,10 +629,10 @@ class AssistantToTargetTranslator:
         target_shape: tuple[int, ...] = (*assistant_logits.shape[:-1], self.target_vocab_size)
         target_logits: torch.FloatTensor = torch.full(target_shape, self.filter_value).to(self._assistant_model_device)
         # Mask for valid indices
-        assistant_indices_mask = self._assistant_to_target_input_ids != self.suppress_tokens_id  
+        assistant_indices_mask = self._assistant_to_target_input_ids != self.suppress_tokens_id
         # Exclude invalid indices
-        target_logits_supported_indices = self._assistant_to_target_input_ids[assistant_indices_mask]  
-        valid_assistant_logits = assistant_logits[..., :self._assistant_to_target_input_ids.shape[0]]
+        target_logits_supported_indices = self._assistant_to_target_input_ids[assistant_indices_mask]
+        valid_assistant_logits = assistant_logits[..., : self._assistant_to_target_input_ids.shape[0]]
 
         target_logits[..., target_logits_supported_indices] = valid_assistant_logits[..., assistant_indices_mask]
 
@@ -764,7 +762,7 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
         assistant_output = self.assistant_model.generate(**generation_args, **self.assistant_kwargs)
         self.assistant_kwargs["past_key_values"] = assistant_output.past_key_values
 
-        candidate_logits = torch.stack(assistant_output.scores, dim=1)
+        assistant_logits = torch.stack(assistant_output.scores, dim=1)
 
         # Use translator to convert tokens and logits
         self._prev_assistant_ids = assistant_output.sequences
@@ -772,7 +770,7 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
             assistant_input_ids, target_input_ids, self._prev_assistant_ids
         )
         self._target_seq_len_with_candidates = target_ids.shape[-1]
-        target_logits = self._atm_translator.get_target_logits(candidate_logits)
+        target_logits = self._atm_translator.get_target_logits(assistant_logits)
 
         return target_ids, target_logits
 

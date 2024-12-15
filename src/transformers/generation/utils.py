@@ -859,7 +859,7 @@ class GenerationMixin:
                         target_tokenizer=target_tokenizer,
                         assistant_tokenizer=assistant_tokenizer,
                         # required in the case that self.config.vocab_size is different from the length of target_tokenizer.get_vocab()
-                        target_vocab_size=self.config.vocab_size,  
+                        target_vocab_size=self.config.vocab_size,
                     )
                 case False:
                     candidate_generator = AssistedCandidateGeneratorDifferentTokenizers(
