@@ -1830,6 +1830,20 @@ class SuppressTokensAtBeginLogitsProcessor(LogitsProcessor):
 
         return scores_processed
 
+class SelectTokensLogitsProcessor(LogitsProcessor):
+    def __init__(
+        self, mapped_tokens, assistant_vocab_size, assistant_model_device, filter_value: float = -float("Inf")
+    ):
+        # Initialize a tensor of size assistant_vocab_size with True values
+        self.suppress_token_mask = torch.ones(assistant_vocab_size, dtype=torch.bool, device=assistant_model_device)
+
+        # Set the values at indices specified in mapped_tokens to False
+        self.suppress_token_mask[mapped_tokens] = False
+        self.filter_value = filter_value
+
+    @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        return scores.masked_fill_(self.suppress_token_mask, self.filter_value)
 
 class SuppressTokensLogitsProcessor(LogitsProcessor):
     r"""
@@ -1860,19 +1874,16 @@ class SuppressTokensLogitsProcessor(LogitsProcessor):
     ```
     """
 
-    def __init__(
-        self, mapped_tokens, assistant_vocab_size, assistant_model_device, filter_value: float = -float("Inf")
-    ):
-        # Initialize a tensor of size assistant_vocab_size with True values
-        self.suppress_token_mask = torch.ones(assistant_vocab_size, dtype=torch.bool, device=assistant_model_device)
-
-        # Set the values at indices specified in mapped_tokens to False
-        self.suppress_token_mask[mapped_tokens] = False
+    def __init__(self, suppress_tokens, device: str = "cpu", filter_value: float = -float("Inf")):
+        self.suppress_tokens = torch.tensor(list(suppress_tokens), device=device)
         self.filter_value = filter_value
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        return scores.masked_fill_(self.suppress_token_mask, self.filter_value)
+        vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
+        suppress_token_mask = isin_mps_friendly(vocab_tensor, self.suppress_tokens)
+        scores = torch.where(suppress_token_mask, self.filter_value, scores)
+        return scores
 
 
 class WhisperTimeStampLogitsProcessor(LogitsProcessor):
