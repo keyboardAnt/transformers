@@ -599,7 +599,6 @@ class GenerationConfigSerializationTest(unittest.TestCase):
             new_config = GenerationConfig.from_pretrained(tmp_dir)
         self.assertSequenceEqual(new_config.suppress_tokens, suppress_tokens)
 
-        # TODO
         suppress_processor = SuppressTokensLogitsProcessor(mapped_tokens=new_config.suppress_tokens)
         self.assertSequenceEqual(suppress_processor.suppress_tokens, suppress_tokens)
 
