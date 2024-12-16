@@ -254,10 +254,10 @@ class AssistedCandidateGenerator(CandidateGenerator):
             self.assistant_kwargs["past_key_values"] = _crop_past_key_values(
                 self.assistant_model, self.assistant_kwargs["past_key_values"], new_cache_size - num_added_tokens
             )
-            self.assistant_kwargs = _prepare_attention_mask(
-                self.assistant_kwargs, input_ids.shape[-1], self.assistant_model.config.is_encoder_decoder
-            )
             self.assistant_kwargs = _prepare_token_type_ids(self.assistant_kwargs, input_ids.shape[-1])
+        self.assistant_kwargs = _prepare_attention_mask(
+            self.assistant_kwargs, input_ids.shape[-1], self.assistant_model.config.is_encoder_decoder
+        )
         return has_past_key_values
 
     def _prepare_generation_args(self, input_ids: torch.LongTensor, min_new_tokens: int, max_new_tokens: int) -> Dict:
@@ -751,7 +751,6 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
 
         # Generate and process outputs using translator
         generation_args["logits_processor"] = self._atm_translator.logits_processors
-        self.assistant_kwargs.pop("attention_mask", None)
         self._prev_assistant_ids, assistant_candidate_logits = self._generate_candidates(generation_args)
 
         # Use translator to convert tokens and logits
