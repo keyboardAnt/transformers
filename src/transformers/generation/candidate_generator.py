@@ -244,13 +244,15 @@ class AssistedCandidateGenerator(CandidateGenerator):
         min_new_tokens = max(min(max_new_tokens, self.main_model_min_length - new_cur_len), 0)
         return min_new_tokens, max_new_tokens
 
-    def _update_past_and_masks(self, input_ids: torch.LongTensor, remove_from_pkv: int = 0) -> bool:
+    def _update_past_and_masks(
+        self, input_ids: torch.LongTensor, remove_from_pkv: int = 0, num_added_tokens: int = 1
+    ) -> bool:
         """Update past key values and attention masks for subsequent generation rounds."""
         has_past_key_values = self.assistant_kwargs.get("past_key_values", None) is not None
         if has_past_key_values:
             new_cache_size = input_ids.shape[-1] - 1 - remove_from_pkv
             self.assistant_kwargs["past_key_values"] = _crop_past_key_values(
-                self.assistant_model, self.assistant_kwargs["past_key_values"], new_cache_size - 1
+                self.assistant_model, self.assistant_kwargs["past_key_values"], new_cache_size - num_added_tokens
             )
             self.assistant_kwargs = _prepare_attention_mask(
                 self.assistant_kwargs, input_ids.shape[-1], self.assistant_model.config.is_encoder_decoder
@@ -582,11 +584,7 @@ class AssistantToTargetTranslator:
         self.suppress_tokens_id: int = suppress_tokens_id
         self._assistant_to_target_input_ids = self._get_assistant_to_target_input_ids()
         self.logits_processors: LogitsProcessorList = LogitsProcessorList(
-            [
-                SuppressTokensLogitsProcessor(
-                    self._get_mapped_input_ids(), assistant_vocab_size, self._assistant_model_device, self.filter_value
-                )
-            ]
+            [SuppressTokensLogitsProcessor(self._get_suppress_input_ids(), self._assistant_model_device)]
         )
 
     def _get_assistant_to_target_input_ids(self):
@@ -599,11 +597,11 @@ class AssistantToTargetTranslator:
                 assistant_to_target_input_ids[idx] = target_vocab[tok]
         return assistant_to_target_input_ids.to(self._assistant_model_device)
 
-    def _get_mapped_input_ids(self) -> list[int]:
+    def _get_suppress_input_ids(self) -> list[int]:
         """
-        Get the input ids that are both in the assistant vocab and in the target vocab.
+        Get the input ids that are in the assistant vocab but not in the target vocab.
         """
-        return torch.where(self._assistant_to_target_input_ids != self.suppress_tokens_id)[0]
+        return torch.where(self._assistant_to_target_input_ids == self.suppress_tokens_id)[0]
 
     def get_target_ids(
         self, assistant_input_ids, target_input_ids, assistant_candidate_ids: torch.LongTensor
@@ -741,17 +739,15 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
         """
         Simplified version of get_candidates that uses the translator cache for token conversion.
         """
-        input_ids = input_ids.to(self.assistant_model.device)
-        target_input_ids = input_ids.clone()
-        assistant_input_ids = self._prepare_assistant_input_ids(target_input_ids)
+        target_input_ids = input_ids.to(self.assistant_model.device)
+        assistant_input_ids, num_added_tokens = self._prepare_assistant_input_ids(target_input_ids)
         min_new_tokens, max_new_tokens = self._calculate_new_tokens(target_input_ids)
 
         if max_new_tokens == 0:
             return input_ids, None
 
-        self._update_past_and_masks(assistant_input_ids)
+        self._update_past_and_masks(assistant_input_ids, num_added_tokens=num_added_tokens)
         generation_args = self._prepare_generation_args(assistant_input_ids, min_new_tokens, max_new_tokens)
-        self.assistant_kwargs.pop("attention_mask", None)
 
         # Ensure scores are returned
         generation_args["generation_config"].output_scores = True
@@ -759,20 +755,16 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
 
         # Generate and process outputs using translator
         generation_args["logits_processor"] = self._atm_translator.logits_processors
-        assistant_output = self.assistant_model.generate(**generation_args, **self.assistant_kwargs)
-        self.assistant_kwargs["past_key_values"] = assistant_output.past_key_values
-
-        assistant_logits = torch.stack(assistant_output.scores, dim=1)
+        self._prev_assistant_ids, assistant_candidate_logits = self._generate_candidates(generation_args)
 
         # Use translator to convert tokens and logits
-        self._prev_assistant_ids = assistant_output.sequences
-        target_ids = self._atm_translator.get_target_ids(
+        target_candidate_ids = self._atm_translator.get_target_ids(
             assistant_input_ids, target_input_ids, self._prev_assistant_ids
         )
-        self._target_seq_len_with_candidates = target_ids.shape[-1]
-        target_logits = self._atm_translator.get_target_logits(assistant_logits)
+        self._target_seq_len_with_candidates = target_candidate_ids.shape[-1]
+        target_candidate_logits = self._atm_translator.get_target_logits(assistant_candidate_logits)
 
-        return target_ids, target_logits
+        return target_candidate_ids, target_candidate_logits
 
     def _prepare_assistant_input_ids(self, target_input_ids: torch.LongTensor) -> torch.LongTensor:
         """
@@ -805,7 +797,7 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
             assistant_input_ids = torch.cat([self._prev_assistant_ids, assistant_new_ids], dim=-1)
         assistant_input_ids = assistant_input_ids.to(torch.int)
 
-        return assistant_input_ids
+        return assistant_input_ids, len(assistant_new_ids[0])
 
 
 class PromptLookupCandidateGenerator(CandidateGenerator):
