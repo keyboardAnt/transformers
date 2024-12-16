@@ -1830,6 +1830,7 @@ class SuppressTokensAtBeginLogitsProcessor(LogitsProcessor):
 
         return scores_processed
 
+
 class SelectTokensLogitsProcessor(LogitsProcessor):
     def __init__(
         self, mapped_tokens, assistant_vocab_size, assistant_model_device, filter_value: float = -float("Inf")
@@ -1844,6 +1845,7 @@ class SelectTokensLogitsProcessor(LogitsProcessor):
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         return scores.masked_fill_(self.suppress_token_mask, self.filter_value)
+
 
 class SuppressTokensLogitsProcessor(LogitsProcessor):
     r"""
