@@ -572,7 +572,6 @@ class AssistantToTargetTranslator:
         assistant_tokenizer: "PreTrainedTokenizerBase",
         assistant_model_device,
         target_vocab_size: int,
-        assistant_vocab_size: int,
         filter_value: float = -float("Inf"),
         suppress_tokens_id: int = -1,
     ):
@@ -652,8 +651,7 @@ class AssistantVocabTranslatorCache:
         target_tokenizer: "PreTrainedTokenizerBase",
         assistant_tokenizer: "PreTrainedTokenizerBase",
         assistant_model_device,
-        target_vocab_size: int,
-        assistant_vocab_size: int,
+        target_vocab_size: int
     ) -> AssistantToTargetTranslator:
         with cls._lock:
             assistant_dict = cls._cache.get(target_tokenizer)
@@ -667,8 +665,7 @@ class AssistantVocabTranslatorCache:
                     target_tokenizer,
                     assistant_tokenizer,
                     assistant_model_device,
-                    target_vocab_size,
-                    assistant_vocab_size,
+                    target_vocab_size
                 )
                 assistant_dict[assistant_tokenizer] = mapping
 
@@ -717,8 +714,7 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
             target_tokenizer,
             assistant_tokenizer,
             assistant_model.device,
-            target_vocab_size,
-            assistant_model.config.vocab_size,
+            target_vocab_size
         )
         super().__init__(
             input_ids,
