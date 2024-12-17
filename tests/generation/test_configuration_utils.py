@@ -599,7 +599,7 @@ class GenerationConfigSerializationTest(unittest.TestCase):
             new_config = GenerationConfig.from_pretrained(tmp_dir)
         self.assertSequenceEqual(new_config.suppress_tokens, suppress_tokens)
 
-        suppress_processor = SuppressTokensLogitsProcessor(mapped_tokens=new_config.suppress_tokens)
+        suppress_processor = SuppressTokensLogitsProcessor(suppress_tokens=new_config.suppress_tokens)
         self.assertSequenceEqual(suppress_processor.suppress_tokens, suppress_tokens)
 
     def test_serialize_generation_guidance_scale(self):
