@@ -738,8 +738,8 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
             return input_ids, None
 
         if self._prev_assistant_ids is None:
-            # Prepare attention mask for the first generation
-            # For subsequent generations, the attention mask is updated in _update_past_and_masks
+            # Prepare attention mask for the first generation.
+            # For subsequent generations, the attention mask is updated in _update_past_and_masks.
             self.assistant_kwargs = _prepare_attention_mask(
                 self.assistant_kwargs, assistant_input_ids.shape[-1], self.assistant_model.config.is_encoder_decoder
             )
