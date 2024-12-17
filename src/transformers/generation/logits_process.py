@@ -1830,6 +1830,7 @@ class SuppressTokensAtBeginLogitsProcessor(LogitsProcessor):
 
         return scores_processed
 
+
 class SuppressTokensLogitsProcessor(LogitsProcessor):
     r"""
     This processor can be used to suppress a list of tokens. The processor will set their log probs to `-inf` so

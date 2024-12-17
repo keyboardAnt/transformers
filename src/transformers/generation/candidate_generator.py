@@ -737,13 +737,6 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
         if max_new_tokens == 0:
             return input_ids, None
 
-        if self._prev_assistant_ids is None:
-            # Prepare attention mask for the first generation.
-            # For subsequent generations, the attention mask is updated in _update_past_and_masks.
-            self.assistant_kwargs = _prepare_attention_mask(
-                self.assistant_kwargs, assistant_input_ids.shape[-1], self.assistant_model.config.is_encoder_decoder
-            )
-
         self._update_past_and_masks(assistant_input_ids, num_added_tokens=num_added_tokens)
         generation_args = self._prepare_generation_args(assistant_input_ids, min_new_tokens, max_new_tokens)
 
@@ -763,6 +756,15 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
         target_candidate_logits = self._atm_translator.get_target_logits(assistant_candidate_logits)
 
         return target_candidate_ids, target_candidate_logits
+
+    def _update_past_and_masks(self, assistant_input_ids: torch.LongTensor, num_added_tokens: int = 1) -> bool:
+        if self._prev_assistant_ids is None:
+            # Prepare attention mask for the first generation.
+            # For subsequent generations, the attention mask is updated in super()_update_past_and_masks.
+            self.assistant_kwargs = _prepare_attention_mask(
+                self.assistant_kwargs, assistant_input_ids.shape[-1], self.assistant_model.config.is_encoder_decoder
+            )
+        return super()._update_past_and_masks(assistant_input_ids, num_added_tokens=num_added_tokens)
 
     def _prepare_assistant_input_ids(self, target_input_ids: torch.LongTensor) -> torch.LongTensor:
         """
