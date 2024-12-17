@@ -254,10 +254,11 @@ class AssistedCandidateGenerator(CandidateGenerator):
             self.assistant_kwargs["past_key_values"] = _crop_past_key_values(
                 self.assistant_model, self.assistant_kwargs["past_key_values"], new_cache_size - num_added_tokens
             )
+            self.assistant_kwargs = _prepare_attention_mask(
+                self.assistant_kwargs, input_ids.shape[-1], self.assistant_model.config.is_encoder_decoder
+            )
             self.assistant_kwargs = _prepare_token_type_ids(self.assistant_kwargs, input_ids.shape[-1])
-        self.assistant_kwargs = _prepare_attention_mask(
-            self.assistant_kwargs, input_ids.shape[-1], self.assistant_model.config.is_encoder_decoder
-        )
+        
         return has_past_key_values
 
     def _prepare_generation_args(self, input_ids: torch.LongTensor, min_new_tokens: int, max_new_tokens: int) -> Dict:
@@ -744,6 +745,10 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
 
         self._update_past_and_masks(assistant_input_ids, num_added_tokens=num_added_tokens)
         generation_args = self._prepare_generation_args(assistant_input_ids, min_new_tokens, max_new_tokens)
+        if self._prev_assistant_ids is None:
+            self.assistant_kwargs = _prepare_attention_mask(
+                self.assistant_kwargs, assistant_input_ids.shape[-1], self.assistant_model.config.is_encoder_decoder
+        )
 
         # Ensure scores are returned
         generation_args["generation_config"].output_scores = True
