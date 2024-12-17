@@ -258,7 +258,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
                 self.assistant_kwargs, input_ids.shape[-1], self.assistant_model.config.is_encoder_decoder
             )
             self.assistant_kwargs = _prepare_token_type_ids(self.assistant_kwargs, input_ids.shape[-1])
-        
+
         return has_past_key_values
 
     def _prepare_generation_args(self, input_ids: torch.LongTensor, min_new_tokens: int, max_new_tokens: int) -> Dict:
@@ -652,7 +652,7 @@ class AssistantVocabTranslatorCache:
         target_tokenizer: "PreTrainedTokenizerBase",
         assistant_tokenizer: "PreTrainedTokenizerBase",
         assistant_model_device,
-        target_vocab_size: int
+        target_vocab_size: int,
     ) -> AssistantToTargetTranslator:
         with cls._lock:
             assistant_dict = cls._cache.get(target_tokenizer)
@@ -663,10 +663,7 @@ class AssistantVocabTranslatorCache:
             mapping = assistant_dict.get(assistant_tokenizer)
             if mapping is None:
                 mapping = AssistantToTargetTranslator(
-                    target_tokenizer,
-                    assistant_tokenizer,
-                    assistant_model_device,
-                    target_vocab_size
+                    target_tokenizer, assistant_tokenizer, assistant_model_device, target_vocab_size
                 )
                 assistant_dict[assistant_tokenizer] = mapping
 
@@ -712,10 +709,7 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
     ):
         # Initialize translator before parent class
         self._atm_translator = AssistantVocabTranslatorCache.get_translator(
-            target_tokenizer,
-            assistant_tokenizer,
-            assistant_model.device,
-            target_vocab_size
+            target_tokenizer, assistant_tokenizer, assistant_model.device, target_vocab_size
         )
         super().__init__(
             input_ids,
@@ -743,12 +737,15 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
         if max_new_tokens == 0:
             return input_ids, None
 
-        self._update_past_and_masks(assistant_input_ids, num_added_tokens=num_added_tokens)
-        generation_args = self._prepare_generation_args(assistant_input_ids, min_new_tokens, max_new_tokens)
         if self._prev_assistant_ids is None:
+            # Prepare attention mask for the first generation
+            # For subsequent generations, the attention mask is updated in _update_past_and_masks
             self.assistant_kwargs = _prepare_attention_mask(
                 self.assistant_kwargs, assistant_input_ids.shape[-1], self.assistant_model.config.is_encoder_decoder
-        )
+            )
+
+        self._update_past_and_masks(assistant_input_ids, num_added_tokens=num_added_tokens)
+        generation_args = self._prepare_generation_args(assistant_input_ids, min_new_tokens, max_new_tokens)
 
         # Ensure scores are returned
         generation_args["generation_config"].output_scores = True
