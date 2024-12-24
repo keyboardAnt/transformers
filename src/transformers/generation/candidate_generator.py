@@ -627,14 +627,14 @@ class AssistantToTargetTranslator:
         self,
         target_tokenizer: "PreTrainedTokenizerBase",
         assistant_tokenizer: "PreTrainedTokenizerBase",
-        assistant_model_device:str = "cpu",
-        target_vocab_size: int = None,
+        assistant_model_device: str = "cpu",
+        target_vocab_size: Optional[int] = None,
         filter_value: float = -float("Inf"),
         suppress_tokens_id: int = -1,
     ):
         self._target_tokenizer: "PreTrainedTokenizerBase" = target_tokenizer
         self._assistant_tokenizer: "PreTrainedTokenizerBase" = assistant_tokenizer
-        self._assistant_model_device:str = assistant_model_device
+        self._assistant_model_device: str = assistant_model_device
         if target_vocab_size:
             self.target_vocab_size: int = target_vocab_size
         else:
@@ -711,7 +711,7 @@ class AssistantVocabTranslatorCache:
         target_tokenizer: "PreTrainedTokenizerBase",
         assistant_tokenizer: "PreTrainedTokenizerBase",
         assistant_model_device: str = "cpu",
-        target_vocab_size: int = None,
+        target_vocab_size: Optional[int] = None,
     ) -> AssistantToTargetTranslator:
         with cls._lock:
             assistant_dict = cls._cache.get(target_tokenizer)
