@@ -660,8 +660,8 @@ class AssistantToTargetTranslator:
             # If the assistant tokenizer has a different space sign than the target tokenizer,
             # we need to replace the assistant space sign with the target space sign in the assistant_vocab.
             assistant_vocab = {
-                (k.replace(assistant_space_sign, target_space_sign, 1) if k.startswith(assistant_space_sign) else k): v
-                for k, v in assistant_vocab.items()
+                (tok.replace(assistant_space_sign, target_space_sign, 1) if tok.startswith(assistant_space_sign) else tok): idx
+                for tok, idx in assistant_vocab.items()
             }
         
         max_assistant_index = max(assistant_vocab.values())
