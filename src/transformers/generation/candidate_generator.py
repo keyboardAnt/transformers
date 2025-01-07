@@ -649,6 +649,21 @@ class AssistantToTargetTranslator:
     def _get_assistant_to_target_input_ids(self):
         target_vocab = self._target_tokenizer.get_vocab()
         assistant_vocab = self._assistant_tokenizer.get_vocab()
+
+        target_space_ids = self._target_tokenizer(" ", add_special_tokens=False)["input_ids"]
+        target_space_sign = self._target_tokenizer.convert_ids_to_tokens(target_space_ids)[0][0]
+
+        assistant_space_ids = self._assistant_tokenizer(" ", add_special_tokens=False)["input_ids"]
+        assistant_space_sign = self._assistant_tokenizer.convert_ids_to_tokens(assistant_space_ids)[0][0]
+
+        if target_space_sign != assistant_space_sign:
+            # If the assistant tokenizer has a different space sign than the target tokenizer,
+            # we need to replace the assistant space sign with the target space sign in the assistant_vocab.
+            assistant_vocab = {
+                (k.replace(assistant_space_sign, target_space_sign, 1) if k.startswith(assistant_space_sign) else k): v
+                for k, v in assistant_vocab.items()
+            }
+        
         max_assistant_index = max(assistant_vocab.values())
         assistant_to_target_input_ids = torch.full((max_assistant_index + 1,), self.suppress_tokens_id, dtype=int)
         for tok, idx in assistant_vocab.items():
