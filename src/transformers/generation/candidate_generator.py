@@ -15,6 +15,7 @@
 
 import copy
 import threading
+import time
 import weakref
 from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
@@ -319,7 +320,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
 
     def _generate_candidates(self, generation_args: Dict) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
         """Generate candidate sequences using the assistant model."""
-        assistant_output = self.assistant_model.generate(**generation_args, **self.assistant_kwargs)
+        assistant_output, _ = self.assistant_model.generate(**generation_args, **self.assistant_kwargs)
         self.assistant_kwargs["past_key_values"] = assistant_output.past_key_values
         if (
             is_sklearn_available()
@@ -527,6 +528,8 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         self.assistant_kwargs.pop("attention_mask", None)
 
         assistant_output = self.assistant_model.generate(**generation_args, **self.assistant_kwargs)
+        if type(assistant_output) is tuple:
+            assistant_output = assistant_output[0]
         new_target_ids = self._process_assistant_outputs(input_ids, assistant_output.sequences, assistant_input_ids)
 
         # Update state

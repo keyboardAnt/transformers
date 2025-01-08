@@ -16,6 +16,7 @@
 import copy
 import inspect
 import os
+import time
 import warnings
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
@@ -2180,6 +2181,8 @@ class GenerationMixin:
         # Set model_kwargs `use_cache` so we can use it later in forward runs
         model_kwargs["use_cache"] = generation_config.use_cache
 
+        time_after_prefill = None
+
         # 10. go into different generation modes
         if generation_mode == GenerationMode.ASSISTED_GENERATION:
             if generation_config.num_return_sequences > 1:
@@ -2212,8 +2215,10 @@ class GenerationMixin:
                 model_kwargs=model_kwargs,
             )
 
+            print(f"ARE WE DOING ANY ASSISTED DECODING???? \n")
+
             # 12. run assisted generate
-            result = self._assisted_decoding(
+            result, time_after_prefill = self._assisted_decoding(
                 input_ids,
                 candidate_generator=candidate_generator,
                 logits_processor=prepared_logits_processor,
@@ -2269,7 +2274,7 @@ class GenerationMixin:
             )
 
             # 12. run sample (it degenerates to greedy search when `generation_config.do_sample=False`)
-            result = self._sample(
+            result, time_after_prefill = self._sample(
                 input_ids,
                 logits_processor=prepared_logits_processor,
                 stopping_criteria=prepared_stopping_criteria,
@@ -2438,7 +2443,8 @@ class GenerationMixin:
                 should_convert_cache = True
             if should_convert_cache:
                 result.past_key_values = result.past_key_values.to_legacy_cache()
-        return result
+
+        return result, time_after_prefill
 
     def _has_unfinished_sequences(
         self,
@@ -3257,6 +3263,7 @@ class GenerationMixin:
                 model_forward = self.get_compiled_call(generation_config.compile_config)
 
         is_prefill = True
+        time_after_prefill = None
         while self._has_unfinished_sequences(
             this_peer_finished, synced_gpus, device=input_ids.device, cur_len=cur_len, max_length=max_length
         ):
@@ -3269,6 +3276,7 @@ class GenerationMixin:
 
             if is_prefill:
                 outputs = self(**model_inputs, return_dict=True)
+                time_after_prefill = time.time()
                 is_prefill = False
             else:
                 outputs = model_forward(**model_inputs, return_dict=True)
@@ -3359,9 +3367,9 @@ class GenerationMixin:
                     attentions=decoder_attentions,
                     hidden_states=decoder_hidden_states,
                     past_key_values=model_kwargs.get("past_key_values"),
-                )
+                ), time_after_prefill
         else:
-            return input_ids
+            return input_ids, time_after_prefill
 
     def _temporary_reorder_cache(self, past_key_values, beam_idx):
         """
@@ -4276,11 +4284,17 @@ class GenerationMixin:
 
         this_peer_finished = False
         is_first_iteration = True  # to preserve the same API in the output as other generation methods
+        token_prefill_time = None
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             cur_len = input_ids.shape[-1]
 
             #  1. Fetch candidate sequences from a `CandidateGenerator` and move to the correct device
             candidate_input_ids, candidate_logits = candidate_generator.get_candidates(input_ids)
+            if is_first_iteration:
+                # Why this works is because assistant decoding implementation
+                # has is_prefill true always and thus it doesn't matter we get
+                # the sampling time there or here.
+                token_prefill_time = time.time()
             candidate_input_ids = candidate_input_ids.to(self.device)
 
             candidate_input_ids = candidate_input_ids.to(self.device)
@@ -4442,6 +4456,7 @@ class GenerationMixin:
             candidate_generator.assistant_model.generation_config.num_assistant_tokens = (
                 candidate_generator.num_assistant_tokens
             )
+
         if return_dict_in_generate:
             if self.config.is_encoder_decoder:
                 return GenerateEncoderDecoderOutput(
@@ -4465,7 +4480,7 @@ class GenerationMixin:
                     past_key_values=model_kwargs.get("past_key_values"),
                 )
         else:
-            return input_ids
+            return input_ids, token_prefill_time
 
 
 def _speculative_sampling(
