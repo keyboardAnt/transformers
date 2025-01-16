@@ -1,5 +1,6 @@
 import os
 
+
 # Force the cache location before any HF imports
 os.environ["TRANSFORMERS_CACHE"] = "/workspace/huggingface_cache"
 os.environ["HF_HOME"] = "/workspace/huggingface"
@@ -16,13 +17,15 @@ for d in [
     os.makedirs(d, exist_ok=True)
 
 import argparse
-from tracemalloc import start
-from datasets import load_dataset
-from transformers import AutoModelForCausalLM, AutoTokenizer
 import time
+
 import pandas as pd
 import torch
+from datasets import load_dataset
 from huggingface_hub import login
+
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 # Access the token from the environment and login
 access_token = os.environ.get("HF_ACCESS_TOKEN")
