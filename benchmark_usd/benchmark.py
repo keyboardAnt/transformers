@@ -26,15 +26,17 @@ from huggingface_hub import login
 # Environment & Setup
 # ------------------------------------------------------------------------------
 
+
 def set_hf_cache_env():
     """
-    Sets the environment variables for Hugging Face caching 
+    Sets the environment variables for Hugging Face caching
     and creates the corresponding directories.
     """
     print("Cache location:")
     hf_home = os.environ["HF_HOME"]  # Store in variable for clarity
     os.makedirs(hf_home, exist_ok=True)
     print(hf_home)
+
 
 def login_to_hf(token_env_var: str = "HF_ACCESS_TOKEN"):
     """
@@ -51,7 +53,9 @@ def parse_args() -> argparse.Namespace:
     Parse command-line arguments.
     """
     parser = argparse.ArgumentParser(description="Generation Script")
-    parser.add_argument("--num_of_examples", default=50, type=int, help="The number of examples from the dataset to run.")
+    parser.add_argument(
+        "--num_of_examples", default=50, type=int, help="The number of examples from the dataset to run."
+    )
     return parser.parse_args()
 
 
@@ -63,38 +67,41 @@ def clear_memory():
     # Run garbage collection multiple times to handle circular references
     for _ in range(3):
         gc.collect()
-    
+
     # Clear CUDA memory if available
     if torch.cuda.is_available():
         # Explicitly empty CUDA cache
         torch.cuda.empty_cache()
-        
+
         # Force synchronization of CUDA threads
         torch.cuda.synchronize()
-        
+
         # Collect inter-process CUDA memory
         torch.cuda.ipc_collect()
-        
+
         # Print memory stats for debugging (optional)
         for i in range(torch.cuda.device_count()):
             print(f"GPU {i} memory allocated: {torch.cuda.memory_allocated(i) / 1e9:.2f}GB")
             print(f"GPU {i} memory cached: {torch.cuda.memory_reserved(i) / 1e9:.2f}GB")
-    
+
     # Reset the PyTorch CPU memory allocator
-    if hasattr(torch, 'cuda'):
+    if hasattr(torch, "cuda"):
         torch.cuda.empty_cache()
-    
+
     print("Memory cleared: Python memory garbage collected and GPU cache emptied.")
+
 
 # ------------------------------------------------------------------------------
 # Streaming
 # ------------------------------------------------------------------------------
+
 
 class IdsIteratorStreamer(BaseStreamer):
     """
     A custom streamer that yields token IDs instead of decoded text.
     Skips the first `prompt_len` tokens, so you don't stream the prompt.
     """
+
     def __init__(self, prompt_len: int = 0):
         super().__init__()
         self.prompt_len = prompt_len
@@ -105,9 +112,9 @@ class IdsIteratorStreamer(BaseStreamer):
     def put(self, token_ids: Optional[torch.Tensor]):
         """
         Called by the generate() method whenever new tokens become available.
-        
+
         Args:
-            token_ids (Optional[torch.Tensor]): A tensor containing newly generated token IDs. 
+            token_ids (Optional[torch.Tensor]): A tensor containing newly generated token IDs.
                 If None, it signals that generation has ended.
         """
         if token_ids is None:
@@ -140,6 +147,7 @@ class IdsIteratorStreamer(BaseStreamer):
                 # Avoid busy waiting
                 time.sleep(0.01)
 
+
 # ------------------------------------------------------------------------------
 # Model Handling
 # ------------------------------------------------------------------------------
@@ -150,6 +158,7 @@ class Result:
     """
     A class to store the results of a generation experiment.
     """
+
     tok_ids_prompt: List[int]
     tok_ids_new: List[int]
     prompt_text: str
@@ -163,26 +172,17 @@ class HFModel:
     """
     Lightweight class to wrap a Hugging Face model and tokenizer for convenience.
     """
-    def __init__(self, model_name: str, device_map: str = 'auto', torch_dtype=torch.float16):
+
+    def __init__(self, model_name: str, device_map: str = "auto", torch_dtype=torch.float16):
         """
         Load a model and tokenizer from the Hugging Face Hub.
         """
         self.model_name = model_name
-        self.model = AutoModelForCausalLM.from_pretrained(
-            model_name,
-            device_map=device_map,
-            torch_dtype=torch_dtype
-        )
+        self.model = AutoModelForCausalLM.from_pretrained(model_name, device_map=device_map, torch_dtype=torch_dtype)
         self.model = torch.compile(self.model, mode="default")
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
 
-    def generate_text(
-        self,
-        prompt: str,
-        do_sample: bool,
-        max_new_tokens: int = 512,
-        **kwargs
-    ):
+    def generate_text(self, prompt: str, do_sample: bool, max_new_tokens: int = 512, **kwargs):
         """
         Generate text from the underlying model, measuring detailed latency metrics.
 
@@ -211,7 +211,7 @@ class HFModel:
             max_batch_size=1,
             max_cache_len=max_generated_length,
             device=self.model.device,
-            dtype=self.model.dtype
+            dtype=self.model.dtype,
         )
 
         # Handle the attention mask to ensure valid memory alignment
@@ -230,7 +230,7 @@ class HFModel:
             output_scores=False,
             output_hidden_states=False,
             output_attentions=False,
-            **kwargs
+            **kwargs,
         )
 
         # Warmup
@@ -249,12 +249,12 @@ class HFModel:
             # Record TTFT if it's the very first token(s)
             if time_to_first_token is None:
                 time_to_first_token = time.time() - start_time
-            
+
             # chunk_of_ids might be shape=() (a single scalar) or shape=(n,) (n tokens)
             # -> force it to be at least shape=(1,):
             if chunk_of_ids.dim() == 0:
                 chunk_of_ids = chunk_of_ids.unsqueeze(0)
-            
+
             new_token_ids_tensors.append(chunk_of_ids)
 
         # Stop the timer here
@@ -345,15 +345,14 @@ def tokenizers_are_identical(t1, t2) -> bool:
     print("✓ Tokenizers are identical")
     return True
 
+
 # ------------------------------------------------------------------------------
 # Generation Logic
 # ------------------------------------------------------------------------------
 
+
 def generate_assisted(
-    prompt: str,
-    target_model_obj: HFModel,
-    do_sample: bool,
-    assistant_model_obj: Optional[HFModel] = None
+    prompt: str, target_model_obj: HFModel, do_sample: bool, assistant_model_obj: Optional[HFModel] = None
 ):
     """
     Demonstrates an assisted generation approach:
@@ -365,22 +364,19 @@ def generate_assisted(
     if assistant_model_obj is not None:
         generate_kwargs["assistant_model"] = assistant_model_obj.model
         are_tokenizers_identical: bool = tokenizers_are_identical(
-            target_model_obj.tokenizer,
-            assistant_model_obj.tokenizer
+            target_model_obj.tokenizer, assistant_model_obj.tokenizer
         )
         print("Tokenizers are identical:", are_tokenizers_identical)
         if not are_tokenizers_identical:
             generate_kwargs["assistant_tokenizer"] = assistant_model_obj.tokenizer
             generate_kwargs["tokenizer"] = target_model_obj.tokenizer
-    return target_model_obj.generate_text(
-        prompt=prompt,
-        do_sample=do_sample,
-        **generate_kwargs
-    )
+    return target_model_obj.generate_text(prompt=prompt, do_sample=do_sample, **generate_kwargs)
+
 
 # ------------------------------------------------------------------------------
 # Main Script
 # ------------------------------------------------------------------------------
+
 
 def main():
     # 1. Environment setup
@@ -398,7 +394,7 @@ def main():
     qwen_checkpoint = "Qwen/Qwen2.5-0.5B-Instruct"
     llama_assistant_checkpoint = "meta-llama/Llama-3.2-1B-Instruct"
     llama_3b_assistant_checkpoint = "meta-llama/Llama-3.2-3B-Instruct"
-    
+
     target_model_obj = HFModel(target_checkpoint)
     qwen_model_obj = HFModel(qwen_checkpoint)
     llama_assistant_model_obj = HFModel(llama_assistant_checkpoint)
@@ -420,10 +416,14 @@ def main():
         print("=" * 100)
 
         print("Running Baseline with `do_sample=False`...")
-        baseline_do_sample_false_result = generate_assisted(prompt=prompt, do_sample=False, target_model_obj=target_model_obj)
+        baseline_do_sample_false_result = generate_assisted(
+            prompt=prompt, do_sample=False, target_model_obj=target_model_obj
+        )
 
         print("Running Baseline with `do_sample=True`...")
-        baseline_do_sample_true_result = generate_assisted(prompt=prompt, do_sample=True, target_model_obj=target_model_obj)
+        baseline_do_sample_true_result = generate_assisted(
+            prompt=prompt, do_sample=True, target_model_obj=target_model_obj
+        )
 
         print("Running Qwen assisted with `do_sample=False`...")
         qwen_uag_result = generate_assisted(
@@ -431,7 +431,6 @@ def main():
             target_model_obj=target_model_obj,
             do_sample=False,
             assistant_model_obj=qwen_model_obj,
-            
         )
 
         print("Running Qwen assisted with `do_sample=True`...")
@@ -459,37 +458,34 @@ def main():
         )
 
         # Collect results
-        results.append({
-            "Baseline `do_sample=False` TPOT": baseline_do_sample_false_result.tpot_s,
-            "Baseline `do_sample=False` TTFT": baseline_do_sample_false_result.ttft_s,
-            "Baseline `do_sample=False` Len Inp": len(baseline_do_sample_false_result.tok_ids_prompt),
-            "Baseline `do_sample=False` New Toks": len(baseline_do_sample_false_result.tok_ids_new),
-
-            "Baseline `do_sample=True` TPOT": baseline_do_sample_true_result.tpot_s,
-            "Baseline `do_sample=True` TTFT": baseline_do_sample_true_result.ttft_s,
-            "Baseline `do_sample=True` Len Inp": len(baseline_do_sample_true_result.tok_ids_prompt),
-            "Baseline `do_sample=True` New Toks": len(baseline_do_sample_true_result.tok_ids_new),
-
-            "Qwen USD TPOT": qwen_result.tpot_s,
-            "Qwen USD TTFT": qwen_result.ttft_s,
-            "Qwen USD Len Inp": len(qwen_result.tok_ids_prompt),
-            "Qwen USD New Toks": len(qwen_result.tok_ids_new),
-
-            "Qwen UAG TPOT": qwen_uag_result.tpot_s,
-            "Qwen UAG TTFT": qwen_uag_result.ttft_s,
-            "Qwen UAG Len Inp": len(qwen_uag_result.tok_ids_prompt),
-            "Qwen UAG New Toks": len(qwen_uag_result.tok_ids_new),
-
-            "Llama 1B TPOT": llama_assisted_result.tpot_s,
-            "Llama 1B TTFT": llama_assisted_result.ttft_s,
-            "Llama 1B Len Inp": len(llama_assisted_result.tok_ids_prompt),
-            "Llama 1B New Toks": len(llama_assisted_result.tok_ids_new),
-
-            "Llama 3B TPOT": llama_3b_assisted_result.tpot_s,
-            "Llama 3B TTFT": llama_3b_assisted_result.ttft_s,
-            "Llama 3B Len Inp": len(llama_3b_assisted_result.tok_ids_prompt),
-            "Llama 3B New Toks": len(llama_3b_assisted_result.tok_ids_new),
-        })
+        results.append(
+            {
+                "Baseline `do_sample=False` TPOT": baseline_do_sample_false_result.tpot_s,
+                "Baseline `do_sample=False` TTFT": baseline_do_sample_false_result.ttft_s,
+                "Baseline `do_sample=False` Len Inp": len(baseline_do_sample_false_result.tok_ids_prompt),
+                "Baseline `do_sample=False` New Toks": len(baseline_do_sample_false_result.tok_ids_new),
+                "Baseline `do_sample=True` TPOT": baseline_do_sample_true_result.tpot_s,
+                "Baseline `do_sample=True` TTFT": baseline_do_sample_true_result.ttft_s,
+                "Baseline `do_sample=True` Len Inp": len(baseline_do_sample_true_result.tok_ids_prompt),
+                "Baseline `do_sample=True` New Toks": len(baseline_do_sample_true_result.tok_ids_new),
+                "Qwen USD TPOT": qwen_result.tpot_s,
+                "Qwen USD TTFT": qwen_result.ttft_s,
+                "Qwen USD Len Inp": len(qwen_result.tok_ids_prompt),
+                "Qwen USD New Toks": len(qwen_result.tok_ids_new),
+                "Qwen UAG TPOT": qwen_uag_result.tpot_s,
+                "Qwen UAG TTFT": qwen_uag_result.ttft_s,
+                "Qwen UAG Len Inp": len(qwen_uag_result.tok_ids_prompt),
+                "Qwen UAG New Toks": len(qwen_uag_result.tok_ids_new),
+                "Llama 1B TPOT": llama_assisted_result.tpot_s,
+                "Llama 1B TTFT": llama_assisted_result.ttft_s,
+                "Llama 1B Len Inp": len(llama_assisted_result.tok_ids_prompt),
+                "Llama 1B New Toks": len(llama_assisted_result.tok_ids_new),
+                "Llama 3B TPOT": llama_3b_assisted_result.tpot_s,
+                "Llama 3B TTFT": llama_3b_assisted_result.ttft_s,
+                "Llama 3B Len Inp": len(llama_3b_assisted_result.tok_ids_prompt),
+                "Llama 3B New Toks": len(llama_3b_assisted_result.tok_ids_new),
+            }
+        )
 
         print(f"Results for prompt {i}:")
         pprint(results[-1])
@@ -515,6 +511,7 @@ def main():
     filename_results = f"latency_benchmark_on_{dataset_name}_{args.num_of_examples}_examples.csv"
     df_results.to_csv(filename_results, index=False)
     print(f"Results saved to {filename_results}")
+
 
 if __name__ == "__main__":
     main()
