@@ -7,10 +7,12 @@ load_dotenv()
 import argparse
 import time
 import pandas as pd
+import numpy as np
 import torch
 import gc
 
-from typing import Optional, List
+from typing import Optional, List, Dict
+from pprint import pprint
 from dataclasses import dataclass
 from threading import Thread
 from datasets import load_dataset
@@ -247,7 +249,7 @@ class HFModel:
             print("Warning: Generation thread did not complete within timeout")
 
         return Result(
-            tok_ids_prompt=inputs["input_ids"].tolist(),
+            tok_ids_prompt=inputs["input_ids"][0].tolist(),
             tok_ids_new=new_token_ids,
             prompt_text=prompt,
             new_text=generated_text,
@@ -372,7 +374,7 @@ def main():
     dataset_sample = dataset.select(range(args.num_of_examples))
 
     # 6. Generation loop
-    results: List[Result] = []
+    results: List[Dict[str, float]] = []
     for i, example in enumerate(dataset_sample):
         prompt = example["input"]  # Adjust if the actual prompt field is different
 
@@ -453,7 +455,24 @@ def main():
             "Llama 3B New Toks": len(llama_3b_assisted_result.tok_ids_new),
         })
 
-        print(f"Results for prompt {i}: {results[-1]}")
+        print(f"Results for prompt {i}:")
+        pprint(results[-1])
+
+        print("TTFT stats:")
+        ttft_values = [v for k, v in results[-1].items() if "TTFT" in k]
+        ttft_mean = np.mean(ttft_values)
+        ttft_std = np.std(ttft_values)
+        print("Mean: ", ttft_mean)
+        print("Std: ", ttft_std)
+        print("Their ratio (std/mean): ", ttft_std / ttft_mean)
+        print("Min: ", np.min(ttft_values))
+        print("Max: ", np.max(ttft_values))
+        print("Median: ", np.median(ttft_values))
+
+        print("TPOTs small to large:")
+        tpots = {k: v for k, v in results[-1].items() if "TPOT" in k}
+        sorted_tpots = sorted(tpots.items(), key=lambda x: x[1])
+        pprint(sorted_tpots)
 
     # 7. Convert to DataFrame & save
     df_results = pd.DataFrame(results)
