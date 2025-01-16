@@ -199,8 +199,6 @@ class HFModel:
             output_attentions=False,
             **kwargs
         )
-        if do_sample is False:
-            generation_kwargs["temperature"] = 0
 
         # Create thread with daemon=True to ensure it's cleaned up
         thread = Thread(target=self.model.generate, kwargs=generation_kwargs, daemon=True)
