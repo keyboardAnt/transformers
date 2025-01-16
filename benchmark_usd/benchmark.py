@@ -227,6 +227,10 @@ class HFModel:
         for _ in range(2):
             self.model.generate(**generation_kwargs)
 
+        # Reset the streamer
+        streamer = IdsIteratorStreamer(prompt_len=prompt_len)
+        generation_kwargs["streamer"] = streamer
+
         # Create thread with daemon=True to ensure it's cleaned up
         thread = Thread(target=self.model.generate, kwargs=generation_kwargs, daemon=True)
         start_time = time.time()
