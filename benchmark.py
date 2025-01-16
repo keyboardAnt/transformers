@@ -8,6 +8,7 @@ import argparse
 import time
 import pandas as pd
 import torch
+import gc
 
 from typing import Optional
 from threading import Thread
@@ -47,6 +48,21 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Generation Script")
     parser.add_argument("--num_of_examples", default=50, type=int, help="The number of examples from the dataset to run.")
     return parser.parse_args()
+
+
+def clear_memory():
+    """
+    Clears Python and GPU memory to ensure a fresh start for experiments.
+    """
+    # Run garbage collection to free Python memory
+    gc.collect()
+    
+    # Clear the GPU cache to free GPU memory
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.ipc_collect()
+    
+    print("Memory cleared: Python memory garbage collected and GPU cache emptied.")
 
 # ------------------------------------------------------------------------------
 # Model Handling
@@ -113,13 +129,15 @@ class HFModel:
         # Calculate final metrics
         duration = time.time() - overall_start_time
         generated_text = "".join(generated_tokens)
+        print("Generated text:\n", generated_text)
         
         input_len = len(inputs["input_ids"][0])
-        output_len = len(self.tokenizer(generated_text)["input_ids"])
-        num_generated_tokens = output_len - input_len
-        tpot = (duration - prefill_time) / (num_generated_tokens - 1) if num_generated_tokens > 1 else float("inf")
+        print("Input len:", input_len)
+        num_generated_tokens_lower_bound = len(self.tokenizer(generated_text)["input_ids"])
+        print("Number of generated tokens is at least (calculated via post-generation tokenization that might merge tokens):", num_generated_tokens_lower_bound)
+        tpot = (duration - prefill_time) / (num_generated_tokens_lower_bound - 1) if num_generated_tokens_lower_bound > 1 else float("inf")
         
-        return generated_text, tpot, prefill_time, input_len, output_len
+        return generated_text, tpot, prefill_time, input_len, num_generated_tokens_lower_bound
 
 
 def tokenizers_are_identical(t1, t2) -> bool:
@@ -250,11 +268,13 @@ def main():
         print(f"Running input prompt {i}...")
 
         print("Running Baseline...")
-        baseline_text, baseline_tpot, baseline_prefill, baseline_inp_len, baseline_out_len = \
+        clear_memory()
+        baseline_text, baseline_tpot, baseline_prefill, baseline_inp_len, baseline_num_of_new_toks_lower_bound = \
             generate_baseline(prompt, target_model_obj)
 
         print("Running Qwen assisted with `do_sample=True`...")
-        qwen_text, qwen_tpot, qwen_prefill, qwen_inp_len, qwen_out_len = generate_assisted(
+        clear_memory()
+        qwen_text, qwen_tpot, qwen_prefill, qwen_inp_len, qwen_num_of_new_toks_lower_bound = generate_assisted(
             prompt=prompt,
             target_model_obj=target_model_obj,
             assistant_model_obj=qwen_model_obj,
@@ -263,7 +283,8 @@ def main():
         )
 
         print("Running Qwen assisted with `do_sample=False`...")
-        qwen_uag_text, qwen_uag_tpot, qwen_uag_prefill, qwen_uag_inp_len, qwen_uag_out_len = generate_assisted(
+        clear_memory()
+        qwen_uag_text, qwen_uag_tpot, qwen_uag_prefill, qwen_uag_inp_len, qwen_uag_num_of_new_toks_lower_bound = generate_assisted(
             prompt=prompt,
             target_model_obj=target_model_obj,
             assistant_model_obj=qwen_model_obj,
@@ -272,7 +293,8 @@ def main():
         )
 
         print("Running Llama 1B assisted...")
-        llama_assisted_text, llama_assisted_tpot, llama_assisted_prefill, llama_assisted_inp_len, llama_assisted_out_len = generate_assisted(
+        clear_memory()
+        llama_assisted_text, llama_assisted_tpot, llama_assisted_prefill, llama_assisted_inp_len, llama_assisted_num_of_new_toks_lower_bound = generate_assisted(
             prompt=prompt,
             target_model_obj=target_model_obj,
             assistant_model_obj=llama_assistant_model_obj,
@@ -281,7 +303,8 @@ def main():
         )
 
         print("Running Llama 3B assisted...")
-        llama_3b_assisted_text, llama_3b_assisted_tpot, llama_3b_assisted_prefill, llama_3b_assisted_inp_len, llama_3b_assisted_out_len = generate_assisted(
+        clear_memory()
+        llama_3b_assisted_text, llama_3b_assisted_tpot, llama_3b_assisted_prefill, llama_3b_assisted_inp_len, llama_3b_assisted_num_of_new_toks_lower_bound = generate_assisted(
             prompt=prompt,
             target_model_obj=target_model_obj,
             assistant_model_obj=llama_3b_assistant_model_obj,
@@ -294,27 +317,27 @@ def main():
             "Baseline TPOT": baseline_tpot,
             "Baseline TTFT": baseline_prefill,
             "Baseline Len Inp": baseline_inp_len,
-            "Baseline Len Out": baseline_out_len,
+            "Baseline New Toks (lower bound)": baseline_num_of_new_toks_lower_bound,
 
             "Qwen USD TPOT": qwen_tpot,
             "Qwen USD TTFT": qwen_prefill,
             "Qwen USD Len Inp": qwen_inp_len,
-            "Qwen USD Len Out": qwen_out_len,
+            "Qwen USD New Toks (lower bound)": qwen_num_of_new_toks_lower_bound,
 
             "Qwen UAG TPOT": qwen_uag_tpot,
             "Qwen UAG TTFT": qwen_uag_prefill,
             "Qwen UAG Len Inp": qwen_uag_inp_len,
-            "Qwen UAG Len Out": qwen_uag_out_len,
+            "Qwen UAG New Toks (lower bound)": qwen_uag_num_of_new_toks_lower_bound,
 
             "Llama 1B TPOT": llama_assisted_tpot,
             "Llama 1B TTFT": llama_assisted_prefill,
             "Llama 1B Len Inp": llama_assisted_inp_len,
-            "Llama 1B Len Out": llama_assisted_out_len,
+            "Llama 1B New Toks (lower bound)": llama_assisted_num_of_new_toks_lower_bound,
 
             "Llama 3B TPOT": llama_3b_assisted_tpot,
             "Llama 3B TTFT": llama_3b_assisted_prefill,
             "Llama 3B Len Inp": llama_3b_assisted_inp_len,
-            "Llama 3B Len Out": llama_3b_assisted_out_len,
+            "Llama 3B New Toks (lower bound)": llama_3b_assisted_num_of_new_toks_lower_bound,
         })
 
         print(f"Results for prompt {i}: {results[-1]}")
