@@ -1,6 +1,8 @@
 import os
 from dotenv import load_dotenv
 
+from transformers.cache_utils import OffloadedStaticCache
+
 # Setting up the `HF_HOME` cache directory and `HF_ACCESS_TOKEN` token
 load_dotenv()
 
@@ -172,6 +174,7 @@ class HFModel:
             device_map=device_map,
             torch_dtype=torch_dtype
         )
+        self.model = torch.compile(self.model, mode="default")
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
 
     def generate_text(
@@ -183,15 +186,44 @@ class HFModel:
     ):
         """
         Generate text from the underlying model, measuring detailed latency metrics.
+
+        Parameters:
+            prompt (str): The input text to generate from.
+            do_sample (bool): Whether to sample or use greedy decoding.
+            max_new_tokens (int): Maximum number of tokens to generate.
+            **kwargs: Additional arguments for the generation method.
         """
+        # Clear any cached memory before starting
         clear_memory()
-        inputs = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)
+
+        # Tokenize the input prompt and move it to the model's device
+        inputs = self.tokenizer(prompt, return_tensors="pt", return_attention_mask=True).to(self.model.device)
         prompt_len = inputs["input_ids"].shape[1]
-        streamer = IdsIteratorStreamer(prompt_len=prompt_len)  # Instead of TextIteratorStreamer
+
+        # Create a streamer for raw token IDs (instead of TextIteratorStreamer)
+        streamer = IdsIteratorStreamer(prompt_len=prompt_len)
+
+        # Calculate the maximum sequence length for KV cache
+        max_generated_length: int = prompt_len + max_new_tokens
+
+        # Initialize a KV cache manager for efficient memory usage
+        past_key_values = OffloadedStaticCache(
+            config=self.model.config,
+            max_batch_size=1,
+            max_cache_len=max_generated_length,
+            device=self.model.device,
+            dtype=self.model.dtype
+        )
+
+        # Handle the attention mask to ensure valid memory alignment
+        attention_mask = inputs.get("attention_mask")
+        if attention_mask is None:
+            attention_mask = torch.ones_like(inputs["input_ids"], dtype=self.model.dtype, device=self.model.device)
 
         generation_kwargs = dict(
             inputs=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
+            past_key_values=past_key_values,
+            attention_mask=attention_mask,
             max_new_tokens=max_new_tokens,
             do_sample=do_sample,
             streamer=streamer,
@@ -201,6 +233,10 @@ class HFModel:
             output_attentions=False,
             **kwargs
         )
+
+        # Warmup
+        for _ in range(2):
+            self.model.generate(**generation_kwargs)
 
         # Create thread with daemon=True to ensure it's cleaned up
         thread = Thread(target=self.model.generate, kwargs=generation_kwargs, daemon=True)
@@ -358,7 +394,8 @@ def main():
     args = parse_args()
 
     # 4. Load models
-    target_checkpoint = "meta-llama/Llama-3.3-70B-Instruct"
+    # target_checkpoint = "meta-llama/Llama-3.3-70B-Instruct"
+    target_checkpoint = "meta-llama/Llama-3.1-8B-Instruct"
     qwen_checkpoint = "Qwen/Qwen2.5-0.5B-Instruct"
     llama_assistant_checkpoint = "meta-llama/Llama-3.2-1B-Instruct"
     llama_3b_assistant_checkpoint = "meta-llama/Llama-3.2-3B-Instruct"
