@@ -1,6 +1,7 @@
 import os
 from dotenv import load_dotenv
 
+# Setting up the `HF_HOME` cache directory and `HF_ACCESS_TOKEN` token
 load_dotenv()
 
 import argparse
@@ -8,6 +9,7 @@ import time
 import pandas as pd
 import torch
 
+from typing import Optional
 from datasets import load_dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from huggingface_hub import login
@@ -19,14 +21,13 @@ from huggingface_hub import login
 
 def set_hf_cache_env():
     """
-    Set environment variables for Hugging Face caching and create the corresponding directories.
+    Sets the environment variables for Hugging Face caching 
+    and creates the corresponding directories.
     """
     print("Cache location:")
-    for d in [
-        os.environ['HF_HOME'],
-    ]:
-        os.makedirs(d, exist_ok=True)
-        print(d)
+    hf_home = os.environ["HF_HOME"]  # Store in variable for clarity
+    os.makedirs(hf_home, exist_ok=True)
+    print(hf_home)
 
 def login_to_hf(token_env_var: str = "HF_ACCESS_TOKEN"):
     """
@@ -69,8 +70,8 @@ class HFModel:
     def generate_text(
         self,
         prompt: str,
+        do_sample: bool,
         max_new_tokens: int = 512,
-        do_sample: bool = True,
         **kwargs
     ):
         """
@@ -93,12 +94,69 @@ class HFModel:
         # Decode output (take the first item in the batch).
         generated_text = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
         
-        # Basic time-per-token: total duration / number of tokens generated
+        # Compute basic time-per-token: total duration / number of tokens generated.
         input_len = len(inputs["input_ids"][0])
         output_len = len(outputs[0])
-        time_per_token = duration / (output_len - input_len) if (output_len - input_len) else float('inf')
+        num_generated_tokens = output_len - input_len  # Store calculation in descriptive variable
+        time_per_token = duration / num_generated_tokens if num_generated_tokens > 0 else float("inf")
 
         return generated_text, time_per_token, prefill_time, input_len, output_len
+
+
+def tokenizers_are_identical(t1, t2) -> bool:
+    """
+    Return True if t1 and t2 are effectively the same tokenizer, i.e.,
+    produce identical results for any input text. This is a thorough approach
+    that checks object identity, init_kwargs, vocab, merges, and special tokens.
+    Adjust or omit checks if your definition of "sameness" is simpler.
+    """
+
+    # 1. Same Python object?
+    if t1 is t2:
+        return True
+
+    # 2. Same class?
+    if type(t1) != type(t2):
+        return False
+
+    # 3. Compare essential init_kwargs
+    #    Omit path-based keys from the comparison to allow local-vs-remote differences.
+    def _filter_init_kwargs(iw):
+        return {k: v for k, v in iw.items() if k not in ["name_or_path", "tokenizer_file"]}
+
+    if _filter_init_kwargs(t1.init_kwargs) != _filter_init_kwargs(t2.init_kwargs):
+        return False
+
+    # 4. Compare vocabulary (simple approach)
+    #    Vocab might be stored differently depending on the tokenizer, adapt as needed.
+    #    Usually a safe approach is t1.get_vocab() vs t2.get_vocab()
+    vocab1 = t1.get_vocab()  # token -> id
+    vocab2 = t2.get_vocab()
+    if len(vocab1) != len(vocab2):
+        return False
+
+    # Optional but more thorough: check each token's ID
+    for token, idx in vocab1.items():
+        if token not in vocab2 or vocab2[token] != idx:
+            return False
+
+    # Also verify that t2 doesn't have extra tokens that t1 lacks
+    for token, idx in vocab2.items():
+        if token not in vocab1 or vocab1[token] != idx:
+            return False
+
+    # 5. Compare merges if it’s a BPE-based tokenizer
+    #    Not all tokenizers have `.merges`. Some have `tokenizer.sp_model`, etc.
+    merges_t1 = getattr(t1, "merges", None)
+    merges_t2 = getattr(t2, "merges", None)
+    if merges_t1 != merges_t2:
+        return False
+
+    # 6. Compare special tokens
+    if t1.special_tokens_map != t2.special_tokens_map:
+        return False
+
+    return True
 
 # ------------------------------------------------------------------------------
 # Generation Logic
@@ -108,13 +166,14 @@ def generate_baseline(prompt: str, model_obj: HFModel):
     """
     Baseline generation using a single HFModel.
     """
-    return model_obj.generate_text(prompt, do_sample=True)
+    return model_obj.generate_text(prompt=prompt, do_sample=True)
 
 def generate_assisted(
     prompt: str,
     target_model_obj: HFModel,
-    assistant_model_obj: HFModel = None,
-    do_sample: bool = False
+    assistant_model_obj: Optional[HFModel],
+    are_tokenizers_identical: bool,
+    do_sample: bool
 ):
     """
     Demonstrates an assisted generation approach:
@@ -122,16 +181,17 @@ def generate_assisted(
     custom logic that merges two models. By default, standard Transformers
     doesn't accept a second 'assistant_model', so adjust as needed.
     """
-    # If you have custom logic that merges the assistant model, it would go here.
-    # For demonstration, we just pass along some custom kwargs if needed.
     generate_kwargs = {}
     if assistant_model_obj is not None:
-        # Possibly you'd do something with assistant_model_obj.model or .tokenizer
-        # For now, assume you pass them to custom generate if your codebase supports it.
         generate_kwargs["assistant_model"] = assistant_model_obj.model
-        generate_kwargs["assistant_tokenizer"] = assistant_model_obj.tokenizer
-
-    return target_model_obj.generate_text(prompt, do_sample=do_sample, **generate_kwargs)
+        if not are_tokenizers_identical:
+            generate_kwargs["assistant_tokenizer"] = assistant_model_obj.tokenizer
+            generate_kwargs["tokenizer"] = target_model_obj.tokenizer
+    return target_model_obj.generate_text(
+        prompt=prompt,
+        do_sample=do_sample,
+        **generate_kwargs
+    )
 
 # ------------------------------------------------------------------------------
 # Main Script
@@ -159,39 +219,55 @@ def main():
     llama_3b_assistant_model_obj = HFModel(llama_3b_assistant_checkpoint)
 
     # 5. Load dataset
-    dataset = load_dataset("tau/scrolls", "qasper", split="test", trust_remote_code=True)
+    dataset_name = "tau/scrolls"
+    dataset = load_dataset(dataset_name, "qasper", split="test", trust_remote_code=True)
     dataset_sample = dataset.select(range(args.num_of_examples))
 
     # 6. Generation loop
     results = []
     for i, example in enumerate(dataset_sample):
-        prompt = example["input"]  # Adjust if actual prompt field differs
+        prompt = example["input"]  # Adjust if the actual prompt field is different
 
         print(f"Running input prompt {i}...")
 
-        # Baseline
-        baseline_text, baseline_tpt, baseline_prefill, baseline_inp_len, baseline_out_len = generate_baseline(
-            prompt, target_model_obj
-        )
+        print("Running Baseline...")
+        baseline_text, baseline_tpt, baseline_prefill, baseline_inp_len, baseline_out_len = \
+            generate_baseline(prompt, target_model_obj)
 
-        # Qwen assisted: sample = True
+        print("Running Qwen assisted with `do_sample=True`...")
         qwen_text, qwen_tpt, qwen_prefill, qwen_inp_len, qwen_out_len = generate_assisted(
-            prompt, target_model_obj, qwen_model_obj, do_sample=True
+            prompt=prompt,
+            target_model_obj=target_model_obj,
+            assistant_model_obj=qwen_model_obj,
+            are_tokenizers_identical=False,
+            do_sample=True
         )
 
-        # Qwen assisted: sample = False
+        print("Running Qwen assisted with `do_sample=False`...")
         qwen_uag_text, qwen_uag_tpt, qwen_uag_prefill, qwen_uag_inp_len, qwen_uag_out_len = generate_assisted(
-            prompt, target_model_obj, qwen_model_obj, do_sample=False
+            prompt=prompt,
+            target_model_obj=target_model_obj,
+            assistant_model_obj=qwen_model_obj,
+            are_tokenizers_identical=False,
+            do_sample=False
         )
 
-        # Llama 1B assisted
+        print("Running Llama 1B assisted...")
         llama_assisted_text, llama_assisted_tpt, llama_assisted_prefill, llama_assisted_inp_len, llama_assisted_out_len = generate_assisted(
-            prompt, target_model_obj, llama_assistant_model_obj
+            prompt=prompt,
+            target_model_obj=target_model_obj,
+            assistant_model_obj=llama_assistant_model_obj,
+            are_tokenizers_identical=True,
+            do_sample=True
         )
 
-        # Llama 3B assisted
+        print("Running Llama 3B assisted...")
         llama_3b_assisted_text, llama_3b_assisted_tpt, llama_3b_assisted_prefill, llama_3b_assisted_inp_len, llama_3b_assisted_out_len = generate_assisted(
-            prompt, target_model_obj, llama_3b_assistant_model_obj
+            prompt=prompt,
+            target_model_obj=target_model_obj,
+            assistant_model_obj=llama_3b_assistant_model_obj,
+            are_tokenizers_identical=True,
+            do_sample=True
         )
 
         # Collect results
@@ -226,8 +302,9 @@ def main():
 
     # 7. Convert to DataFrame & save
     df_results = pd.DataFrame(results)
-    df_results.to_csv("generation_comparison_scrolls.csv", index=False)
-    print("Results saved to generation_comparison_scrolls.csv")
+    filename_results = f"latency_benchmark_on_{dataset_name}_{args.num_of_examples}_examples.csv"
+    df_results.to_csv(filename_results, index=False)
+    print(f"Results saved to {filename_results}")
 
 if __name__ == "__main__":
     main()
