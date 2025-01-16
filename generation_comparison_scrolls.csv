@@ -1,2 +1,0 @@
-Baseline Time Per Token ,Baseline Prefill Time,Baseline Len Inp,Baseline Len Out,Qwen USD Time Per Token ,Qwen USD Prefill Time,Qwen USD Len Inp,Qwen USD Len Out,Qwen UAG Time Per Token ,Qwen UAG Prefill Time,Qwen UAG Len Inp,Llama 1B Len Out,Llama 1B Time Per Token ,Llama 1B Prefill Time,Llama 1B Len Inp,Llama 3B Time Per Token ,Llama 3B Prefill Time,Llama 3B Len Inp,Llama 3B Len Out
-0.03328462938467661,,3720,4200,0.12257185811176896,,3720,4232,0.05792753351852298,,3720,4232,0.03163441410288215,,3720,0.050132295582443476,,3720,4232
