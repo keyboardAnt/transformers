@@ -383,8 +383,8 @@ def main():
     args = parse_args()
 
     # 4. Load models
-    # target_checkpoint = "meta-llama/Llama-3.3-70B-Instruct"
-    target_checkpoint = "meta-llama/Llama-3.1-8B-Instruct"
+    target_checkpoint = "meta-llama/Llama-3.3-70B-Instruct"
+    # target_checkpoint = "meta-llama/Llama-3.1-8B-Instruct"
     qwen_checkpoint = "Qwen/Qwen2.5-0.5B-Instruct"
     llama_assistant_checkpoint = "meta-llama/Llama-3.2-1B-Instruct"
     llama_3b_assistant_checkpoint = "meta-llama/Llama-3.2-3B-Instruct"
