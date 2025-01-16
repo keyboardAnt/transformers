@@ -95,7 +95,6 @@ class IdsIteratorStreamer(BaseStreamer):
     def __init__(self, prompt_len: int = 0):
         super().__init__()
         self.prompt_len = prompt_len
-        print(f"prompt_len={self.prompt_len}")
         self.tokens_seen = 0
         self.buffer = []
         self.is_finished = False
@@ -183,6 +182,7 @@ class HFModel:
         """
         Generate text from the underlying model, measuring detailed latency metrics.
         """
+        clear_memory()
         inputs = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)
         prompt_len = inputs["input_ids"].shape[1]
         streamer = IdsIteratorStreamer(prompt_len=prompt_len)  # Instead of TextIteratorStreamer
@@ -233,7 +233,6 @@ class HFModel:
         # Move to model device if necessary
         new_token_ids = new_token_ids.to(self.model.device)
         generated_text = self.tokenizer.decode(new_token_ids, skip_special_tokens=True)
-        print("Prompt:\n", prompt)
         print("=" * 50)
         print("Generated text:\n", generated_text)
         print("=" * 50)
@@ -313,18 +312,11 @@ def tokenizers_are_identical(t1, t2) -> bool:
 # Generation Logic
 # ------------------------------------------------------------------------------
 
-def generate_baseline(prompt: str, model_obj: HFModel):
-    """
-    Baseline generation using a single HFModel.
-    """
-    return model_obj.generate_text(prompt=prompt, do_sample=True)
-
 def generate_assisted(
     prompt: str,
     target_model_obj: HFModel,
-    assistant_model_obj: Optional[HFModel],
-    are_tokenizers_identical: bool,
-    do_sample: bool
+    do_sample: bool,
+    assistant_model_obj: Optional[HFModel] = None
 ):
     """
     Demonstrates an assisted generation approach:
@@ -335,6 +327,11 @@ def generate_assisted(
     generate_kwargs = {}
     if assistant_model_obj is not None:
         generate_kwargs["assistant_model"] = assistant_model_obj.model
+        are_tokenizers_identical: bool = tokenizers_are_identical(
+            target_model_obj.tokenizer,
+            assistant_model_obj.tokenizer
+        )
+        print("Tokenizers are identical:", are_tokenizers_identical)
         if not are_tokenizers_identical:
             generate_kwargs["assistant_tokenizer"] = assistant_model_obj.tokenizer
             generate_kwargs["tokenizer"] = target_model_obj.tokenizer
@@ -369,15 +366,6 @@ def main():
     llama_assistant_model_obj = HFModel(llama_assistant_checkpoint)
     llama_3b_assistant_model_obj = HFModel(llama_3b_assistant_checkpoint)
 
-    # Test tokenizers' compatibility
-    print("Testing tokenizers' compatibility...")
-    qwen_tokenizer_eq_target = tokenizers_are_identical(target_model_obj.tokenizer, qwen_model_obj.tokenizer)
-    print("Target and Qwen:", qwen_tokenizer_eq_target)
-    llama_1b_tokenizer_eq_target = tokenizers_are_identical(target_model_obj.tokenizer, llama_assistant_model_obj.tokenizer)
-    print("Target and Llama 1B:", llama_1b_tokenizer_eq_target)
-    llama_3b_tokenizer_eq_target = tokenizers_are_identical(target_model_obj.tokenizer, llama_3b_assistant_model_obj.tokenizer)
-    print("Target and Llama 3B:", llama_3b_tokenizer_eq_target)
-
     # 5. Load dataset
     dataset_name = "tau/scrolls"
     dataset = load_dataset(dataset_name, "qasper", split="test", trust_remote_code=True)
@@ -388,58 +376,61 @@ def main():
     for i, example in enumerate(dataset_sample):
         prompt = example["input"]  # Adjust if the actual prompt field is different
 
+        print("=" * 100)
         print(f"Running input prompt {i}...")
+        print("Prompt:\n", prompt)
+        print("=" * 100)
 
-        print("Running Baseline...")
-        clear_memory()
-        baseline_result = generate_baseline(prompt, target_model_obj)
+        print("Running Baseline with `do_sample=False`...")
+        baseline_do_sample_false_result = generate_assisted(prompt=prompt, do_sample=False, target_model_obj=target_model_obj)
 
-        print("Running Qwen assisted with `do_sample=True`...")
-        clear_memory()
-        qwen_result = generate_assisted(
-            prompt=prompt,
-            target_model_obj=target_model_obj,
-            assistant_model_obj=qwen_model_obj,
-            are_tokenizers_identical=qwen_tokenizer_eq_target,
-            do_sample=True
-        )
+        print("Running Baseline with `do_sample=True`...")
+        baseline_do_sample_true_result = generate_assisted(prompt=prompt, do_sample=True, target_model_obj=target_model_obj)
 
         print("Running Qwen assisted with `do_sample=False`...")
-        clear_memory()
         qwen_uag_result = generate_assisted(
             prompt=prompt,
             target_model_obj=target_model_obj,
+            do_sample=False,
             assistant_model_obj=qwen_model_obj,
-            are_tokenizers_identical=qwen_tokenizer_eq_target,
-            do_sample=False
+            
+        )
+
+        print("Running Qwen assisted with `do_sample=True`...")
+        qwen_result = generate_assisted(
+            prompt=prompt,
+            target_model_obj=target_model_obj,
+            do_sample=True,
+            assistant_model_obj=qwen_model_obj,
         )
 
         print("Running Llama 1B assisted...")
-        clear_memory()
         llama_assisted_result = generate_assisted(
             prompt=prompt,
             target_model_obj=target_model_obj,
+            do_sample=True,
             assistant_model_obj=llama_assistant_model_obj,
-            are_tokenizers_identical=llama_1b_tokenizer_eq_target,
-            do_sample=True
         )
 
         print("Running Llama 3B assisted...")
-        clear_memory()
         llama_3b_assisted_result = generate_assisted(
             prompt=prompt,
             target_model_obj=target_model_obj,
+            do_sample=True,
             assistant_model_obj=llama_3b_assistant_model_obj,
-            are_tokenizers_identical=llama_3b_tokenizer_eq_target,
-            do_sample=True
         )
 
         # Collect results
         results.append({
-            "Baseline TPOT": baseline_result.tpot_s,
-            "Baseline TTFT": baseline_result.ttft_s,
-            "Baseline Len Inp": len(baseline_result.tok_ids_prompt),
-            "Baseline New Toks": len(baseline_result.tok_ids_new),
+            "Baseline `do_sample=False` TPOT": baseline_do_sample_false_result.tpot_s,
+            "Baseline `do_sample=False` TTFT": baseline_do_sample_false_result.ttft_s,
+            "Baseline `do_sample=False` Len Inp": len(baseline_do_sample_false_result.tok_ids_prompt),
+            "Baseline `do_sample=False` New Toks": len(baseline_do_sample_false_result.tok_ids_new),
+
+            "Baseline `do_sample=True` TPOT": baseline_do_sample_true_result.tpot_s,
+            "Baseline `do_sample=True` TTFT": baseline_do_sample_true_result.ttft_s,
+            "Baseline `do_sample=True` Len Inp": len(baseline_do_sample_true_result.tok_ids_prompt),
+            "Baseline `do_sample=True` New Toks": len(baseline_do_sample_true_result.tok_ids_new),
 
             "Qwen USD TPOT": qwen_result.tpot_s,
             "Qwen USD TTFT": qwen_result.ttft_s,
