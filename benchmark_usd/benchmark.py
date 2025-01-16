@@ -1,8 +1,6 @@
 import os
 from dotenv import load_dotenv
 
-from transformers.cache_utils import OffloadedStaticCache
-
 # Setting up the `HF_HOME` cache directory and `HF_ACCESS_TOKEN` token
 load_dotenv()
 
@@ -20,6 +18,7 @@ from threading import Thread
 from datasets import load_dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.generation.streamers import BaseStreamer
+from transformers.cache_utils import OffloadedStaticCache
 from huggingface_hub import login
 
 
