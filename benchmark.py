@@ -10,8 +10,9 @@ import pandas as pd
 import torch
 
 from typing import Optional
+from threading import Thread
 from datasets import load_dataset
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, TextIteratorStreamer
 from huggingface_hub import login
 
 
@@ -75,32 +76,50 @@ class HFModel:
         **kwargs
     ):
         """
-        Generate text from the underlying model.
-        Returns:
-            generated_text (str), duration (float), prefill_time (None), input_len (int), output_len (int)
+        Generate text from the underlying model, measuring both:
+          (1) prefill latency (time until the first token arrives)
+          (2) total generation latency.
         """
         inputs = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)
-        start_time = time.time()
-        outputs = self.model.generate(
-            **inputs,
-            max_new_tokens=max_new_tokens,
-            do_sample=do_sample,
+        
+        # Setup streamer for token-by-token generation
+        streamer = TextIteratorStreamer(self.tokenizer, skip_prompt=True)
+        
+        # Prepare generation kwargs
+        generation_kwargs = {
+            "inputs": inputs["input_ids"],
+            "attention_mask": inputs["attention_mask"],
+            "max_new_tokens": max_new_tokens,
+            "do_sample": do_sample,
+            "streamer": streamer,
             **kwargs
-        )
-        duration = time.time() - start_time
+        }
         
-        # We currently do not measure prefill time separately, so it's None.
-        prefill_time = None
-        # Decode output (take the first item in the batch).
-        generated_text = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
-        
-        # Compute basic time-per-token: total duration / number of tokens generated.
-        input_len = len(inputs["input_ids"][0])
-        output_len = len(outputs[0])
-        num_generated_tokens = output_len - input_len  # Store calculation in descriptive variable
-        time_per_token = duration / num_generated_tokens if num_generated_tokens > 0 else float("inf")
+        # Start generation in background thread
+        generation_thread = Thread(target=self.model.generate, kwargs=generation_kwargs)
+        overall_start_time = time.time()
+        generation_thread.start()
 
-        return generated_text, time_per_token, prefill_time, input_len, output_len
+        # Collect streaming tokens
+        generated_tokens = []
+        prefill_time = None
+        
+        # Process tokens as they arrive
+        for new_text in streamer:
+            if prefill_time is None:
+                prefill_time = time.time() - overall_start_time
+            generated_tokens.append(new_text)
+        
+        # Calculate final metrics
+        duration = time.time() - overall_start_time
+        generated_text = "".join(generated_tokens)
+        
+        input_len = len(inputs["input_ids"][0])
+        output_len = len(self.tokenizer(generated_text)["input_ids"])
+        num_generated_tokens = output_len - input_len
+        tpot = (duration - prefill_time) / (num_generated_tokens - 1) if num_generated_tokens > 1 else float("inf")
+        
+        return generated_text, tpot, prefill_time, input_len, output_len
 
 
 def tokenizers_are_identical(t1, t2) -> bool:
@@ -231,11 +250,11 @@ def main():
         print(f"Running input prompt {i}...")
 
         print("Running Baseline...")
-        baseline_text, baseline_tpt, baseline_prefill, baseline_inp_len, baseline_out_len = \
+        baseline_text, baseline_tpot, baseline_prefill, baseline_inp_len, baseline_out_len = \
             generate_baseline(prompt, target_model_obj)
 
         print("Running Qwen assisted with `do_sample=True`...")
-        qwen_text, qwen_tpt, qwen_prefill, qwen_inp_len, qwen_out_len = generate_assisted(
+        qwen_text, qwen_tpot, qwen_prefill, qwen_inp_len, qwen_out_len = generate_assisted(
             prompt=prompt,
             target_model_obj=target_model_obj,
             assistant_model_obj=qwen_model_obj,
@@ -244,7 +263,7 @@ def main():
         )
 
         print("Running Qwen assisted with `do_sample=False`...")
-        qwen_uag_text, qwen_uag_tpt, qwen_uag_prefill, qwen_uag_inp_len, qwen_uag_out_len = generate_assisted(
+        qwen_uag_text, qwen_uag_tpot, qwen_uag_prefill, qwen_uag_inp_len, qwen_uag_out_len = generate_assisted(
             prompt=prompt,
             target_model_obj=target_model_obj,
             assistant_model_obj=qwen_model_obj,
@@ -253,7 +272,7 @@ def main():
         )
 
         print("Running Llama 1B assisted...")
-        llama_assisted_text, llama_assisted_tpt, llama_assisted_prefill, llama_assisted_inp_len, llama_assisted_out_len = generate_assisted(
+        llama_assisted_text, llama_assisted_tpot, llama_assisted_prefill, llama_assisted_inp_len, llama_assisted_out_len = generate_assisted(
             prompt=prompt,
             target_model_obj=target_model_obj,
             assistant_model_obj=llama_assistant_model_obj,
@@ -262,7 +281,7 @@ def main():
         )
 
         print("Running Llama 3B assisted...")
-        llama_3b_assisted_text, llama_3b_assisted_tpt, llama_3b_assisted_prefill, llama_3b_assisted_inp_len, llama_3b_assisted_out_len = generate_assisted(
+        llama_3b_assisted_text, llama_3b_assisted_tpot, llama_3b_assisted_prefill, llama_3b_assisted_inp_len, llama_3b_assisted_out_len = generate_assisted(
             prompt=prompt,
             target_model_obj=target_model_obj,
             assistant_model_obj=llama_3b_assistant_model_obj,
@@ -272,28 +291,28 @@ def main():
 
         # Collect results
         results.append({
-            "Baseline Time Per Token": baseline_tpt,
-            "Baseline Prefill Time": baseline_prefill,
+            "Baseline TPOT": baseline_tpot,
+            "Baseline TTFT": baseline_prefill,
             "Baseline Len Inp": baseline_inp_len,
             "Baseline Len Out": baseline_out_len,
 
-            "Qwen USD Time Per Token": qwen_tpt,
-            "Qwen USD Prefill Time": qwen_prefill,
+            "Qwen USD TPOT": qwen_tpot,
+            "Qwen USD TTFT": qwen_prefill,
             "Qwen USD Len Inp": qwen_inp_len,
             "Qwen USD Len Out": qwen_out_len,
 
-            "Qwen UAG Time Per Token": qwen_uag_tpt,
-            "Qwen UAG Prefill Time": qwen_uag_prefill,
+            "Qwen UAG TPOT": qwen_uag_tpot,
+            "Qwen UAG TTFT": qwen_uag_prefill,
             "Qwen UAG Len Inp": qwen_uag_inp_len,
             "Qwen UAG Len Out": qwen_uag_out_len,
 
-            "Llama 1B Time Per Token": llama_assisted_tpt,
-            "Llama 1B Prefill Time": llama_assisted_prefill,
+            "Llama 1B TPOT": llama_assisted_tpot,
+            "Llama 1B TTFT": llama_assisted_prefill,
             "Llama 1B Len Inp": llama_assisted_inp_len,
             "Llama 1B Len Out": llama_assisted_out_len,
 
-            "Llama 3B Time Per Token": llama_3b_assisted_tpt,
-            "Llama 3B Prefill Time": llama_3b_assisted_prefill,
+            "Llama 3B TPOT": llama_3b_assisted_tpot,
+            "Llama 3B TTFT": llama_3b_assisted_prefill,
             "Llama 3B Len Inp": llama_3b_assisted_inp_len,
             "Llama 3B Len Out": llama_3b_assisted_out_len,
         })
