@@ -182,7 +182,6 @@ class HFModel:
         """
         self.model_name = model_name
         self.model = AutoModelForCausalLM.from_pretrained(model_name, device_map=device_map, torch_dtype=torch_dtype)
-        self.model = torch.compile(self.model, mode="default")
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
 
     def generate_text(self, prompt: str, do_sample: bool, max_new_tokens: int = 512, **kwargs):
@@ -205,18 +204,6 @@ class HFModel:
         # Create a streamer for raw token IDs (instead of TextIteratorStreamer)
         streamer = IdsIteratorStreamer(prompt_len=prompt_len)
 
-        # Calculate the maximum sequence length for KV cache
-        max_generated_length: int = prompt_len + max_new_tokens
-
-        # Initialize a KV cache manager for efficient memory usage
-        past_key_values = OffloadedStaticCache(
-            config=self.model.config,
-            max_batch_size=1,
-            max_cache_len=max_generated_length,
-            device=self.model.device,
-            dtype=self.model.dtype,
-        )
-
         # Handle the attention mask to ensure valid memory alignment
         attention_mask = inputs.get("attention_mask")
         if attention_mask is None:
@@ -224,8 +211,8 @@ class HFModel:
 
         generation_kwargs = dict(
             inputs=inputs["input_ids"],
-            past_key_values=past_key_values,
             attention_mask=attention_mask,
+            cache_implementation="offloaded",
             max_new_tokens=max_new_tokens,
             do_sample=do_sample,
             streamer=streamer,
