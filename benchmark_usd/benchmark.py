@@ -59,7 +59,7 @@ def parse_args() -> argparse.Namespace:
     """
     parser = argparse.ArgumentParser(description="Generation Script")
     parser.add_argument(
-        "--num_of_examples", default=50, type=int, help="The number of examples from the dataset to run."
+        "--num_of_examples", default=30, type=int, help="The number of examples from the dataset to run."
     )
     return parser.parse_args()
 
