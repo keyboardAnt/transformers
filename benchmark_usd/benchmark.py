@@ -413,7 +413,11 @@ def main():
     # 6. Generation loop
     results: List[Dict[str, float]] = []
     for i, example in enumerate(dataset_sample):
-        prompt = example["input"]  # Adjust if the actual prompt field is different
+        # Tau/Scrolls dataset
+        # prompt = example["input"]  # Adjust if the actual prompt field is different
+
+        # CNN Daily Mail dataset
+        prompt = f"Summarize the following article.\nArticle:\n{example['article']}\nSummary:\n"
 
         print("=" * 100)
         print(f"Running input prompt {i}...")
