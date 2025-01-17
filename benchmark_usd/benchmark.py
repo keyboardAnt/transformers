@@ -1,4 +1,6 @@
+from datetime import datetime
 import os
+import subprocess
 
 from dotenv import load_dotenv
 
@@ -395,8 +397,14 @@ def main():
     llama_3b_assistant_model_obj = HFModel(llama_3b_assistant_checkpoint)
 
     # 5. Load dataset
-    dataset_name = "tau/scrolls"
-    dataset = load_dataset(dataset_name, "qasper", split="test", trust_remote_code=True)
+    dataset_path = "tau/scrolls"
+    dataset_name = "qasper"
+    dataset_split = "test"
+    print("Loading dataset:")
+    print(f"Dataset path: {dataset_path}")
+    print(f"Dataset name: {dataset_name}")
+    print(f"Dataset split: {dataset_split}")
+    dataset = load_dataset(path=dataset_path, name=dataset_name, split=dataset_split, trust_remote_code=True)
     dataset_sample = dataset.select(range(args.num_of_examples))
 
     # 6. Generation loop
@@ -502,7 +510,16 @@ def main():
 
     # 7. Convert to DataFrame & save
     df_results = pd.DataFrame(results)
-    filename_results = f"latency_benchmark_on_{dataset_name}_{args.num_of_examples}_examples.csv"
+    
+    # Create output directory if it doesn't exist
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    commit_hash = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"]).decode("utf-8").strip()
+    dirpath = f"benchmark_results/{timestamp}_{commit_hash}"
+    os.makedirs(dirpath, exist_ok=True)
+
+    # Save to the benchmark_results directory
+    dataset_info = f"{dataset_path}_{dataset_name}_{dataset_split}".replace("/", "-")
+    filename_results = os.path.join(dirpath, f"latency_benchmark_on_{dataset_info}_{args.num_of_examples}_examples.csv")
     df_results.to_csv(filename_results, index=False)
     print(f"Results saved to {filename_results}")
 
