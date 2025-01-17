@@ -397,15 +397,18 @@ def main():
     llama_3b_assistant_model_obj = HFModel(llama_3b_assistant_checkpoint)
 
     # 5. Load dataset
-    dataset_path = "tau/scrolls"
-    dataset_name = "qasper"
-    dataset_split = "test"
+    # dataset_path = "tau/scrolls"
+    # dataset_name = "qasper"
+    # dataset_split = "test"
+    dataset_path = "cnn_dailymail"
+    dataset_name = "3.0.0"
+    dataset_split = "validation"
     print("Loading dataset:")
     print(f"Dataset path: {dataset_path}")
     print(f"Dataset name: {dataset_name}")
     print(f"Dataset split: {dataset_split}")
     dataset = load_dataset(path=dataset_path, name=dataset_name, split=dataset_split, trust_remote_code=True)
-    dataset_sample = dataset.select(range(args.num_of_examples))
+    dataset_sample = dataset.take(args.num_of_examples)
 
     # 6. Generation loop
     results: List[Dict[str, float]] = []
