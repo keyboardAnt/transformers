@@ -56,6 +56,7 @@ from .candidate_generator import (
     CandidateGenerator,
     EarlyExitCandidateGenerator,
     PromptLookupCandidateGenerator,
+    UniversalSpeculativeDecodingGenerator,
     _crop_past_key_values,
     _prepare_attention_mask,
     _prepare_token_type_ids,
@@ -845,16 +846,33 @@ class GenerationMixin:
                 max_length=generation_config.max_length,
             )
         elif different_tokenizers:
-            candidate_generator = AssistedCandidateGeneratorDifferentTokenizers(
-                input_ids=input_ids,
-                assistant_model=assistant_model,
-                generation_config=generation_config,
-                model_kwargs=model_kwargs,
-                inputs_tensor=inputs_tensor,
-                logits_processor=logits_processor,
-                target_tokenizer=target_tokenizer,
-                assistant_tokenizer=assistant_tokenizer,
-            )
+            match generation_config.do_sample:
+                case True:
+                    candidate_generator = UniversalSpeculativeDecodingGenerator(
+                        input_ids=input_ids,
+                        assistant_model=assistant_model,
+                        generation_config=generation_config,
+                        model_kwargs=model_kwargs,
+                        inputs_tensor=inputs_tensor,
+                        logits_processor=logits_processor,
+                        target_tokenizer=target_tokenizer,
+                        assistant_tokenizer=assistant_tokenizer,
+                        # required in the case that self.config.vocab_size is different from the length of target_tokenizer.get_vocab()
+                        target_vocab_size=self.config.vocab_size,
+                    )
+                case False:
+                    candidate_generator = AssistedCandidateGeneratorDifferentTokenizers(
+                        input_ids=input_ids,
+                        assistant_model=assistant_model,
+                        generation_config=generation_config,
+                        model_kwargs=model_kwargs,
+                        inputs_tensor=inputs_tensor,
+                        logits_processor=logits_processor,
+                        target_tokenizer=target_tokenizer,
+                        assistant_tokenizer=assistant_tokenizer,
+                    )
+                case _:
+                    raise ValueError(f"Invalid value for `do_sample`: {generation_config.do_sample}")
         else:
             candidate_generator = AssistedCandidateGenerator(
                 input_ids=input_ids,
@@ -1634,17 +1652,18 @@ class GenerationMixin:
                     cache_dtype = self.get_output_embeddings().weight.dtype
 
             def get_layer_device_map(execution_device_map: Optional[dict] = None):
+                num_hidden_layers = self.config.get_text_config().num_hidden_layers
                 if execution_device_map is None:
                     return None
                 elif len(execution_device_map) == 1 and "" in execution_device_map:
-                    return {idx: execution_device_map[""] for idx in range(self.config.num_hidden_layers)}
+                    return {idx: execution_device_map[""] for idx in range(num_hidden_layers)}
                 layer_device_map = {}
                 for layer in execution_device_map:
-                    for idx in range(self.config.num_hidden_layers):
+                    for idx in range(num_hidden_layers):
                         if f".{idx}." in f"{layer}.":
                             layer_device_map[idx] = execution_device_map[layer]
                             break
-                for idx in range(self.config.num_hidden_layers):
+                for idx in range(num_hidden_layers):
                     if idx not in layer_device_map:
                         raise RuntimeError(f"layer {idx} has not been mapped to a device.")
                 return layer_device_map
@@ -4263,6 +4282,7 @@ class GenerationMixin:
 
             #  1. Fetch candidate sequences from a `CandidateGenerator` and move to the correct device
             candidate_input_ids, candidate_logits = candidate_generator.get_candidates(input_ids)
+            candidate_input_ids = candidate_input_ids.to(self.device)
 
             candidate_input_ids = candidate_input_ids.to(self.device)
             if candidate_logits is not None:
