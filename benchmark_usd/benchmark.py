@@ -472,11 +472,13 @@ def main():
         ar_do_sample_false_result = generate_assisted(
             prompt=prompt, do_sample=False, target_model_obj=gemma_9b_target_obj
         )
+        clear_memory()
 
         print(f"Running AR with `do_sample=True` for {gemma_9b_target_checkpoint}...")
         ar_do_sample_true_result = generate_assisted(
             prompt=prompt, do_sample=True, target_model_obj=gemma_9b_target_obj
         )
+        clear_memory()
 
         print(f"Running SLEM (assisted generation with `do_sample=False`) for {gemma_9b_target_checkpoint} with {vicuna_68m_assistant_checkpoint}...")
         slem_result = generate_assisted(
@@ -485,6 +487,7 @@ def main():
             do_sample=False,
             assistant_model_obj=vicuna_68m_assistant_obj,
         )
+        clear_memory()
 
         print(f"Running TLI (assisted generation with `do_sample=False`) for {gemma_9b_target_checkpoint} with {vicuna_68m_assistant_checkpoint}...")
         tli_do_sample_false_result = generate_assisted(
@@ -494,6 +497,7 @@ def main():
             do_sample=False, 
             assistant_model_obj=vicuna_68m_assistant_obj,
         )
+        clear_memory()
 
         print(f"Running TLI (assisted generation with `do_sample=True`) for {gemma_9b_target_checkpoint} with {vicuna_68m_assistant_checkpoint}...")
         tli_do_sample_true_result = generate_assisted(
@@ -502,6 +506,7 @@ def main():
             do_sample=True,
             assistant_model_obj=vicuna_68m_assistant_obj,
         )
+        clear_memory()
 
         print(f"Running SD (assisted generation with `do_sample=False`) for {gemma_9b_target_checkpoint} with {gemma_2b_assistant_checkpoint}...")
         sd_do_sample_false_result = generate_assisted(
@@ -510,6 +515,7 @@ def main():
             do_sample=False,
             assistant_model_obj=gemma_2b_assistant_obj,
         )
+        clear_memory()
 
         print(f"Running SD (assisted generation with `do_sample=True`) for {gemma_9b_target_checkpoint} with {gemma_2b_assistant_checkpoint}...")
         sd_do_sample_true_result = generate_assisted(
@@ -518,6 +524,7 @@ def main():
             do_sample=True,
             assistant_model_obj=gemma_2b_assistant_obj,
         )
+        clear_memory()
 
         # Collect results
         results.append(

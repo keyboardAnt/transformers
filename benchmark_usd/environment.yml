@@ -7,13 +7,17 @@ channels:
 dependencies:
   - python=3.11
   - pytorch
-  - pytorch-cuda=12.1
+  - pytorch-cuda=12.6
   - python-dotenv
   - pandas
   - numpy
   - datasets
   - huggingface_hub
   - accelerate
+  - tiktoken
+  - protobuf
+  - blobfile
+  - sentencepiece
   - pip
   - pip:
     - -e git+https://github.com/keyboardAnt/transformers.git@f63fa1c42562cb1f64b391811d1c9acf1e7521ac#egg=transformers
