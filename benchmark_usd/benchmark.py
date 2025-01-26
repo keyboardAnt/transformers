@@ -441,12 +441,12 @@ def main():
     gemma_2b_assistant_obj = HFModel(gemma_2b_assistant_checkpoint)
 
     # 6. Load dataset
-    dataset_path = "tau/scrolls"
-    dataset_name = "qasper"
-    dataset_split = "test"
-    # dataset_path = "cnn_dailymail"
-    # dataset_name = "3.0.0"
-    # dataset_split = "validation"
+    # dataset_path = "tau/scrolls"
+    # dataset_name = "qasper"
+    # dataset_split = "test"
+    dataset_path = "cnn_dailymail"
+    dataset_name = "3.0.0"
+    dataset_split = "validation"
     print("Loading dataset:")
     print(f"Dataset path: {dataset_path}")
     print(f"Dataset name: {dataset_name}")
@@ -457,11 +457,13 @@ def main():
     # 7. Generation loop
     results: List[Dict[str, float]] = []
     for i, example in enumerate(dataset_sample):
+        
+        # TODO: Select the dataset ###################################################
         # Tau/Scrolls dataset
-        prompt = example["input"]  # Adjust if the actual prompt field is different
-
+        # prompt = example["input"]  # Adjust if the actual prompt field is different
         # CNN Daily Mail dataset
-        # prompt = f"Summarize the following article.\nArticle:\n{example['article']}\nSummary:\n"
+        prompt = f"Summarize the following article.\nArticle:\n{example['article']}\nSummary:\n"
+        ##############################################################################
 
         print("=" * 100)
         print(f"Running input prompt {i}...")
