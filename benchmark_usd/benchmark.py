@@ -485,7 +485,8 @@ def main():
         tli_do_sample_false_result = generate_assisted(
             prompt=prompt,
             target_model_obj=gemma_9b_target_obj,
-            do_sample=False,
+            # TODO: Set `do_sample=True` and the temperature to `1e-7`
+            do_sample=False, 
             assistant_model_obj=vicuna_68m_assistant_obj,
         )
 
