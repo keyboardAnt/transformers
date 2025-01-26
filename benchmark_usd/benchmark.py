@@ -385,24 +385,25 @@ def main():
     args = parse_args()
 
     # 4. Load models
-    # target_checkpoint = "meta-llama/Llama-3.3-70B-Instruct"
-    target_checkpoint = "meta-llama/Llama-3.1-8B-Instruct"
-    qwen_checkpoint = "Qwen/Qwen2.5-0.5B-Instruct"
-    llama_assistant_checkpoint = "meta-llama/Llama-3.2-1B-Instruct"
-    llama_3b_assistant_checkpoint = "meta-llama/Llama-3.2-3B-Instruct"
+    # target_checkpoint = "meta-llama/Llama-3.1-70B-Instruct"
+    # qwen_checkpoint = "Qwen/Qwen2.5-0.5B-Instruct"
+    # llama_assistant_checkpoint = "meta-llama/Llama-3.2-1B-Instruct"
+    # llama_3b_assistant_checkpoint = "meta-llama/Llama-3.2-3B-Instruct"
+    gemma_9b_target_checkpoint = "google/gemma-2-9b-it"
+    vicuna_68m_assistant_checkpoint = "double7/vicuna-68m"
+    gemma_2b_assistant_checkpoint = "google/gemma-2-2b-it"
 
-    target_model_obj = HFModel(target_checkpoint)
-    qwen_model_obj = HFModel(qwen_checkpoint)
-    llama_assistant_model_obj = HFModel(llama_assistant_checkpoint)
-    llama_3b_assistant_model_obj = HFModel(llama_3b_assistant_checkpoint)
+    gemma_9b_target_obj = HFModel(gemma_9b_target_checkpoint)
+    vicuna_68m_assistant_obj = HFModel(vicuna_68m_assistant_checkpoint)
+    gemma_2b_assistant_obj = HFModel(gemma_2b_assistant_checkpoint)
 
     # 5. Load dataset
-    # dataset_path = "tau/scrolls"
-    # dataset_name = "qasper"
-    # dataset_split = "test"
-    dataset_path = "cnn_dailymail"
-    dataset_name = "3.0.0"
-    dataset_split = "validation"
+    dataset_path = "tau/scrolls"
+    dataset_name = "qasper"
+    dataset_split = "test"
+    # dataset_path = "cnn_dailymail"
+    # dataset_name = "3.0.0"
+    # dataset_split = "validation"
     print("Loading dataset:")
     print(f"Dataset path: {dataset_path}")
     print(f"Dataset name: {dataset_name}")
@@ -414,85 +415,97 @@ def main():
     results: List[Dict[str, float]] = []
     for i, example in enumerate(dataset_sample):
         # Tau/Scrolls dataset
-        # prompt = example["input"]  # Adjust if the actual prompt field is different
+        prompt = example["input"]  # Adjust if the actual prompt field is different
 
         # CNN Daily Mail dataset
-        prompt = f"Summarize the following article.\nArticle:\n{example['article']}\nSummary:\n"
+        # prompt = f"Summarize the following article.\nArticle:\n{example['article']}\nSummary:\n"
 
         print("=" * 100)
         print(f"Running input prompt {i}...")
         print("Prompt:\n", prompt)
         print("=" * 100)
 
-        print("Running Baseline with `do_sample=False`...")
-        baseline_do_sample_false_result = generate_assisted(
-            prompt=prompt, do_sample=False, target_model_obj=target_model_obj
+        print(f"Running AR with `do_sample=False` for {gemma_9b_target_checkpoint}...")
+        ar_do_sample_false_result = generate_assisted(
+            prompt=prompt, do_sample=False, target_model_obj=gemma_9b_target_obj
         )
 
-        print("Running Baseline with `do_sample=True`...")
-        baseline_do_sample_true_result = generate_assisted(
-            prompt=prompt, do_sample=True, target_model_obj=target_model_obj
+        print(f"Running AR with `do_sample=True` for {gemma_9b_target_checkpoint}...")
+        ar_do_sample_true_result = generate_assisted(
+            prompt=prompt, do_sample=True, target_model_obj=gemma_9b_target_obj
         )
 
-        print("Running Qwen assisted with `do_sample=False`...")
-        qwen_uag_result = generate_assisted(
+        print(f"Running SLEM (assisted generation with `do_sample=False`) for {gemma_9b_target_checkpoint} with {vicuna_68m_assistant_checkpoint}...")
+        slem_result = generate_assisted(
             prompt=prompt,
-            target_model_obj=target_model_obj,
+            target_model_obj=gemma_9b_target_obj,
             do_sample=False,
-            assistant_model_obj=qwen_model_obj,
+            assistant_model_obj=vicuna_68m_assistant_obj,
         )
 
-        print("Running Qwen assisted with `do_sample=True`...")
-        qwen_result = generate_assisted(
+        print(f"Running TLI (assisted generation with `do_sample=False`) for {gemma_9b_target_checkpoint} with {vicuna_68m_assistant_checkpoint}...")
+        tli_do_sample_false_result = generate_assisted(
             prompt=prompt,
-            target_model_obj=target_model_obj,
-            do_sample=True,
-            assistant_model_obj=qwen_model_obj,
+            target_model_obj=gemma_9b_target_obj,
+            do_sample=False,
+            assistant_model_obj=vicuna_68m_assistant_obj,
         )
 
-        print("Running Llama 1B assisted...")
-        llama_assisted_result = generate_assisted(
+        print(f"Running TLI (assisted generation with `do_sample=True`) for {gemma_9b_target_checkpoint} with {vicuna_68m_assistant_checkpoint}...")
+        tli_do_sample_true_result = generate_assisted(
             prompt=prompt,
-            target_model_obj=target_model_obj,
+            target_model_obj=gemma_9b_target_obj,
             do_sample=True,
-            assistant_model_obj=llama_assistant_model_obj,
+            assistant_model_obj=vicuna_68m_assistant_obj,
         )
 
-        print("Running Llama 3B assisted...")
-        llama_3b_assisted_result = generate_assisted(
+        print(f"Running SD (assisted generation with `do_sample=False`) for {gemma_9b_target_checkpoint} with {gemma_2b_assistant_checkpoint}...")
+        sd_do_sample_false_result = generate_assisted(
             prompt=prompt,
-            target_model_obj=target_model_obj,
+            target_model_obj=gemma_9b_target_obj,
+            do_sample=False,
+            assistant_model_obj=gemma_2b_assistant_obj,
+        )
+
+        print(f"Running SD (assisted generation with `do_sample=True`) for {gemma_9b_target_checkpoint} with {gemma_2b_assistant_checkpoint}...")
+        sd_do_sample_true_result = generate_assisted(
+            prompt=prompt,
+            target_model_obj=gemma_9b_target_obj,
             do_sample=True,
-            assistant_model_obj=llama_3b_assistant_model_obj,
+            assistant_model_obj=gemma_2b_assistant_obj,
         )
 
         # Collect results
         results.append(
             {
-                "Baseline `do_sample=False` TPOT": baseline_do_sample_false_result.tpot_s,
-                "Baseline `do_sample=False` TTFT": baseline_do_sample_false_result.ttft_s,
-                "Baseline `do_sample=False` Len Inp": len(baseline_do_sample_false_result.tok_ids_prompt),
-                "Baseline `do_sample=False` New Toks": len(baseline_do_sample_false_result.tok_ids_new),
-                "Baseline `do_sample=True` TPOT": baseline_do_sample_true_result.tpot_s,
-                "Baseline `do_sample=True` TTFT": baseline_do_sample_true_result.ttft_s,
-                "Baseline `do_sample=True` Len Inp": len(baseline_do_sample_true_result.tok_ids_prompt),
-                "Baseline `do_sample=True` New Toks": len(baseline_do_sample_true_result.tok_ids_new),
-                "Qwen USD TPOT": qwen_result.tpot_s,
-                "Qwen USD TTFT": qwen_result.ttft_s,
-                "Qwen USD Len Inp": len(qwen_result.tok_ids_prompt),
-                "Qwen USD New Toks": len(qwen_result.tok_ids_new),
-                "Qwen UAG TPOT": qwen_uag_result.tpot_s,
-                "Qwen UAG TTFT": qwen_uag_result.ttft_s,
-                "Qwen UAG Len Inp": len(qwen_uag_result.tok_ids_prompt),
-                "Qwen UAG New Toks": len(qwen_uag_result.tok_ids_new),
-                "Llama 1B TPOT": llama_assisted_result.tpot_s,
-                "Llama 1B TTFT": llama_assisted_result.ttft_s,
-                "Llama 1B Len Inp": len(llama_assisted_result.tok_ids_prompt),
-                "Llama 1B New Toks": len(llama_assisted_result.tok_ids_new),
-                "Llama 3B TPOT": llama_3b_assisted_result.tpot_s,
-                "Llama 3B TTFT": llama_3b_assisted_result.ttft_s,
-                "Llama 3B Len Inp": len(llama_3b_assisted_result.tok_ids_prompt),
-                "Llama 3B New Toks": len(llama_3b_assisted_result.tok_ids_new),
+                "AR `do_sample=False` TPOT": ar_do_sample_false_result.tpot_s,
+                "AR `do_sample=False` TTFT": ar_do_sample_false_result.ttft_s,
+                "AR `do_sample=False` Len Inp": len(ar_do_sample_false_result.tok_ids_prompt),
+                "AR `do_sample=False` New Toks": len(ar_do_sample_false_result.tok_ids_new),
+                "AR `do_sample=True` TPOT": ar_do_sample_true_result.tpot_s,
+                "AR `do_sample=True` TTFT": ar_do_sample_true_result.ttft_s,
+                "AR `do_sample=True` Len Inp": len(ar_do_sample_true_result.tok_ids_prompt),
+                "AR `do_sample=True` New Toks": len(ar_do_sample_true_result.tok_ids_new),
+                "TLI `do_sample=False` TPOT": tli_do_sample_false_result.tpot_s,
+                "TLI `do_sample=False` TTFT": tli_do_sample_false_result.ttft_s,
+                "TLI `do_sample=False` Len Inp": len(tli_do_sample_false_result.tok_ids_prompt),
+                "TLI `do_sample=False` New Toks": len(tli_do_sample_false_result.tok_ids_new),
+                "TLI `do_sample=True` TPOT": tli_do_sample_true_result.tpot_s,
+                "TLI `do_sample=True` TTFT": tli_do_sample_true_result.ttft_s,
+                "TLI `do_sample=True` Len Inp": len(tli_do_sample_true_result.tok_ids_prompt),
+                "TLI `do_sample=True` New Toks": len(tli_do_sample_true_result.tok_ids_new),
+                "SLEM TPOT": slem_result.tpot_s,
+                "SLEM TTFT": slem_result.ttft_s,
+                "SLEM Len Inp": len(slem_result.tok_ids_prompt),
+                "SLEM New Toks": len(slem_result.tok_ids_new),
+                "SD `do_sample=False` TPOT": sd_do_sample_false_result.tpot_s,
+                "SD `do_sample=False` TTFT": sd_do_sample_false_result.ttft_s,
+                "SD `do_sample=False` Len Inp": len(sd_do_sample_false_result.tok_ids_prompt),
+                "SD `do_sample=False` New Toks": len(sd_do_sample_false_result.tok_ids_new),
+                "SD `do_sample=True` TPOT": sd_do_sample_true_result.tpot_s,
+                "SD `do_sample=True` TTFT": sd_do_sample_true_result.ttft_s,
+                "SD `do_sample=True` Len Inp": len(sd_do_sample_true_result.tok_ids_prompt),
+                "SD `do_sample=True` New Toks": len(sd_do_sample_true_result.tok_ids_new),
             }
         )
 
