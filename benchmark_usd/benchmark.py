@@ -64,6 +64,31 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def log_hardware_info(log_filename="benchmark_hardware_info.log"):
+    """
+    Logs hardware information including hostname, GPU, and CPU details to a file.
+
+    Args:
+        log_filename (str): Name of the file where hardware details will be logged.
+    """
+    try:
+        with open(log_filename, "w") as log_file:
+            log_file.write(f"Hostname: {os.uname().nodename}\n")
+
+            # Get GPU details using nvidia-smi
+            gpu_info = subprocess.run(["nvidia-smi"], capture_output=True, text=True)
+            log_file.write("\nGPU Details:\n" + gpu_info.stdout)
+
+            # Get CPU details using lscpu
+            cpu_info = subprocess.run(["lscpu"], capture_output=True, text=True)
+            log_file.write("\nCPU Details:\n" + cpu_info.stdout)
+
+        print(f"Hardware information saved to {log_filename}")
+
+    except Exception as e:
+        print(f"Error logging hardware information: {e}")
+
+
 def clear_memory():
     """
     Clears Python and GPU memory to ensure a fresh start for experiments.
@@ -384,7 +409,10 @@ def main():
     # 3. Parse arguments
     args = parse_args()
 
-    # 4. Load models
+    # 4. Log hardware info
+    log_hardware_info()
+
+    # 5. Load models
     # target_checkpoint = "meta-llama/Llama-3.1-70B-Instruct"
     # qwen_checkpoint = "Qwen/Qwen2.5-0.5B-Instruct"
     # llama_assistant_checkpoint = "meta-llama/Llama-3.2-1B-Instruct"
@@ -397,7 +425,7 @@ def main():
     vicuna_68m_assistant_obj = HFModel(vicuna_68m_assistant_checkpoint)
     gemma_2b_assistant_obj = HFModel(gemma_2b_assistant_checkpoint)
 
-    # 5. Load dataset
+    # 6. Load dataset
     dataset_path = "tau/scrolls"
     dataset_name = "qasper"
     dataset_split = "test"
@@ -411,7 +439,7 @@ def main():
     dataset = load_dataset(path=dataset_path, name=dataset_name, split=dataset_split, trust_remote_code=True)
     dataset_sample = dataset.take(args.num_of_examples)
 
-    # 6. Generation loop
+    # 7. Generation loop
     results: List[Dict[str, float]] = []
     for i, example in enumerate(dataset_sample):
         # Tau/Scrolls dataset
@@ -528,7 +556,7 @@ def main():
         sorted_tpots = sorted(tpots.items(), key=lambda x: x[1])
         pprint(sorted_tpots)
 
-    # 7. Convert to DataFrame & save
+    # 8. Convert to DataFrame & save
     df_results = pd.DataFrame(results)
     
     # Create output directory if it doesn't exist
