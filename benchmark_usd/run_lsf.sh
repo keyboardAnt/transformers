@@ -3,5 +3,5 @@
 #BSUB -gpu "num=1:gmem=40000"
 
 module load miniconda/24.11_environmentally
-conda activate benchmark-usd-env
+conda activate bench-env
 python /home/projects/dharel/nadavt/repos/transformers/benchmark_usd/benchmark.py
