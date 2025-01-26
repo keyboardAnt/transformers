@@ -21,17 +21,13 @@ accelerate launch --config_file accelerate_config_single_gpu.yaml benchmark.py
 On an LSF cluster, you can run the benchmark manually as follows. Activate the conda environment and call the benchmark script.
 ```bash
 timestamp=$(date +\%Y\%m\%d_\%H\%M\%S) && bsub -q "long-gpu short-gpu risk-gpu" \
-     -gpu "num=1:gmem=80000" \
-     -R "select[gpumodel=='NVIDIAA100_SXM4']" \
+     -M 64GB \
+     -gpu "num=1:mode=exclusive_process:gmem=80000" \
      -oo /home/projects/dharel/nadavt/repos/transformers/benchmark_usd/lsf_logs/${timestamp}_jobid_%J_benchmark_out.log \
      -eo /home/projects/dharel/nadavt/repos/transformers/benchmark_usd/lsf_logs/${timestamp}_jobid_%J_benchmark_err.log \
      "module load miniconda/24.11_environmentally && conda activate bench-env && python /home/projects/dharel/nadavt/repos/transformers/benchmark_usd/benchmark.py"
 ```
-Or without specifying the GPU model:
+To specify the GPU model, add the `-R` option. For example:
 ```bash
-timestamp=$(date +\%Y\%m\%d_\%H\%M\%S) && bsub -q "long-gpu short-gpu risk-gpu" \
-     -gpu "num=1:gmem=80000" \
-     -oo /home/projects/dharel/nadavt/repos/transformers/benchmark_usd/lsf_logs/${timestamp}_jobid_%J_benchmark_out.log \
-     -eo /home/projects/dharel/nadavt/repos/transformers/benchmark_usd/lsf_logs/${timestamp}_jobid_%J_benchmark_err.log \
-     "module load miniconda/24.11_environmentally && conda activate bench-env && python /home/projects/dharel/nadavt/repos/transformers/benchmark_usd/benchmark.py"
+-R "select[gpumodel=='NVIDIAA100_SXM4']"
 ```

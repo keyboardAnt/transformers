@@ -1,6 +1,7 @@
 #!/bin/bash
 #BSUB -q long-gpu
-#BSUB -gpu "num=1:gmem=40000"
+#BSUB -M 64GB
+#BSUB -gpu "num=1:mode=exclusive_process:gmem=80000"
 #BSUB -oo /home/projects/dharel/nadavt/repos/transformers/benchmark_usd/lsf_logs/$(date +\%Y\%m\%d_\%H\%M\%S)_jobid_%J_benchmark_out.log
 #BSUB -eo /home/projects/dharel/nadavt/repos/transformers/benchmark_usd/lsf_logs/$(date +\%Y\%m\%d_\%H\%M\%S)_jobid_%J_benchmark_err.log
 

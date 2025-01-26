@@ -82,6 +82,11 @@ def log_hardware_info(filepath: str):
             print(f"GPU Details:\n{gpu_info.stdout}")
             log_file.write("\nGPU Details:\n" + gpu_info.stdout)
 
+            # Get GPU memory usage
+            gpu_memory_info = subprocess.run(["nvidia-smi", "--query-gpu=memory.used,memory.free", "--format=csv,noheader"], capture_output=True, text=True)
+            print(f"GPU Memory Usage:\n{gpu_memory_info.stdout}")
+            log_file.write("\nGPU Memory Usage:\n" + gpu_memory_info.stdout)
+
             # Get CPU details using lscpu
             cpu_info = subprocess.run(["lscpu"], capture_output=True, text=True)
             print(f"CPU Details:\n{cpu_info.stdout}")
