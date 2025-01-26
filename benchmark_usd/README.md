@@ -1,3 +1,8 @@
+To install the conda environment:
+```bash
+conda env create -f environment.yml --verbose
+```
+
 To run the benchmark using the default `accelerate` configuration:
 ```bash
 python benchmark.py
