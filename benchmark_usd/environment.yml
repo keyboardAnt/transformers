@@ -12,7 +12,7 @@ dependencies:
   - pandas
   - numpy
   - datasets
-  - huggingface-hub
+  - huggingface_hub
   - accelerate
   - pip
   - pip:
