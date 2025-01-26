@@ -64,7 +64,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def log_hardware_info(log_filename="benchmark_hardware_info.log"):
+def log_hardware_info(filepath: str):
     """
     Logs hardware information including hostname, GPU, and CPU details to a file.
 
@@ -72,18 +72,22 @@ def log_hardware_info(log_filename="benchmark_hardware_info.log"):
         log_filename (str): Name of the file where hardware details will be logged.
     """
     try:
-        with open(log_filename, "w") as log_file:
-            log_file.write(f"Hostname: {os.uname().nodename}\n")
+        with open(filepath, "w") as log_file:
+            hostname = os.uname().nodename
+            print(f"Hostname: {hostname}")
+            log_file.write(f"Hostname: {hostname}\n")
 
             # Get GPU details using nvidia-smi
             gpu_info = subprocess.run(["nvidia-smi"], capture_output=True, text=True)
+            print(f"GPU Details:\n{gpu_info.stdout}")
             log_file.write("\nGPU Details:\n" + gpu_info.stdout)
 
             # Get CPU details using lscpu
             cpu_info = subprocess.run(["lscpu"], capture_output=True, text=True)
+            print(f"CPU Details:\n{cpu_info.stdout}")
             log_file.write("\nCPU Details:\n" + cpu_info.stdout)
 
-        print(f"Hardware information saved to {log_filename}")
+        print(f"Hardware information saved to {filepath}")
 
     except Exception as e:
         print(f"Error logging hardware information: {e}")
@@ -409,8 +413,14 @@ def main():
     # 3. Parse arguments
     args = parse_args()
 
+    # Create output directory if it doesn't exist
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    commit_hash = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"]).decode("utf-8").strip()
+    dirpath = f"benchmark_results/{timestamp}_{commit_hash}"
+    os.makedirs(dirpath, exist_ok=True)
+
     # 4. Log hardware info
-    log_hardware_info()
+    log_hardware_info(f"{dirpath}/benchmark_hardware_info.log")
 
     # 5. Load models
     # target_checkpoint = "meta-llama/Llama-3.1-70B-Instruct"
@@ -558,12 +568,6 @@ def main():
 
     # 8. Convert to DataFrame & save
     df_results = pd.DataFrame(results)
-    
-    # Create output directory if it doesn't exist
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    commit_hash = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"]).decode("utf-8").strip()
-    dirpath = f"benchmark_results/{timestamp}_{commit_hash}"
-    os.makedirs(dirpath, exist_ok=True)
 
     # Save to the benchmark_results directory
     dataset_info = f"{dataset_path}_{dataset_name}_{dataset_split}".replace("/", "-")
