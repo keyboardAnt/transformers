@@ -4,4 +4,4 @@
 
 module load miniconda/24.11_environmentally
 conda activate benchmark-usd-env
-python benchmark.py
+python /home/projects/dharel/nadavt/repos/transformers/benchmark_usd/benchmark.py
