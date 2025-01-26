@@ -1,0 +1,22 @@
+\usepackage{array}
+\usepackage{tabularx}
+\renewcommand{\arraystretch}{1.0}
+
+{\tiny
+\setlength{\tabcolsep}{1pt}
+\begin{tabularx}{\textwidth}{|X|X|X|X|X|X|X|X|X|X|X|X|X|X|X|X|X|X|X|X|X|X|X|X|X|X|X|X|X|X|}
+\hline
+Target & Task & Data & In Toks & Device & \multicolumn{6}{|c|}{AR} & Drafter & \multicolumn{6}{|c|}{SD} & \multicolumn{6}{|c|}{Alg \ref{alg:exact-matching}} & \multicolumn{6}{|c|}{Alg \ref{alg:vocabs-intersection}} \\ \hline
+\multicolumn{5}{|c|}{} & \multicolumn{3}{|c|}{$t=0$} & \multicolumn{3}{|c|}{$t>0$} &  & \multicolumn{3}{|c|}{$t=0$} & \multicolumn{3}{|c|}{$t>0$} & \multicolumn{3}{|c|}{$t=0$} & \multicolumn{3}{|c|}{$t>0$} & \multicolumn{3}{|c|}{$t=0$} & \multicolumn{3}{|c|}{$t>0$} \\ \hline
+ &  &  &  &  & Out Toks & TTFT (ms) & TPOT (ms) & Out Toks & TTFT (ms) & TPOT (ms) &  & Out Toks & TTFT (ms) & TPOT (ms) & Out Toks & TTFT (ms) & TPOT (ms) & Out Toks & TTFT (ms) & TPOT (ms) & Out Toks & TTFT (ms) & TPOT (ms) & Out Toks & TTFT (ms) & TPOT (ms) & Out Toks & TTFT (ms) & TPOT (ms) \\ \hline
+Llama-3.1-70B & long-ctx summ &  &  & A100 * 2 &  &  &  &  &  &  & Qwen2-0.5B-Instruct & N/A & N/A & N/A & N/A & N/A & N/A &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+Llama-3.1-70B & long-ctx summ &  &  & A100 * 2 &  &  &  &  &  &  & Llama-3.2-1B & N/A & N/A & N/A & N/A & N/A & N/A &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+Llama-3.1-70B & long-ctx summ &  &  & A100 * 2 &  &  &  &  &  &  & Llama-3.2-3B & N/A & N/A & N/A & N/A & N/A & N/A &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+Llama-3.1-70B & long-ctx summ &  &  & A100 * 2 &  &  &  &  &  &  & Llama-3.1-8B & N/A & N/A & N/A & N/A & N/A & N/A &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+Mixtral-8x22B-Instruct-v0.1 & summ &  &  & A100 * 4 &  &  &  &  &  &  & vicuna-68m & N/A & N/A & N/A & N/A & N/A & N/A &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+Gemma-2-9b & summ &  &  & A6000 &  &  &  &  &  &  & vicuna-68m & N/A & N/A & N/A & N/A & N/A & N/A &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+CodeLlama-13b-Instruct-hf & coding &  &  & A6000 &  &  &  &  &  &  & tiny-starcoder-py & N/A & N/A & N/A & N/A & N/A & N/A &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+Phi-3-medium-128k-instruct & long-ctx summ &  &  & A6000 &  &  &  &  &  &  & Qwen2-0.5B-Instruct & N/A & N/A & N/A & N/A & N/A & N/A &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+Mixtral-8x22B-Instruct-v0.1 & long-ctx summ &  &  & A100 * 4 &  &  &  &  &  &  & Qwen2-0.5B-Instruct & N/A & N/A & N/A & N/A & N/A & N/A &  &  &  &  &  &  &  &  &  &  &  &  \\ \hline
+\end{tabularx}
+}
