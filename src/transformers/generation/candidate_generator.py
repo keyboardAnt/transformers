@@ -21,6 +21,8 @@ from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 import numpy as np
 import torch
 
+import random
+
 from ..utils import is_sklearn_available
 
 
@@ -41,6 +43,7 @@ if TYPE_CHECKING:
     from ..tokenization_utils_base import PreTrainedTokenizerBase
     from .configuration_utils import GenerationConfig
 
+global random_overlap
 
 class CandidateGenerator:
     """Abstract base class for all candidate generators that can be applied during assisted generation."""
@@ -680,7 +683,15 @@ class AssistantToTargetTranslator:
         max_assistant_index = max(assistant_vocab.values())
         assistant_to_target_input_ids = torch.full((max_assistant_index + 1,), self.suppress_tokens_id, dtype=int)
         target_to_assistant_input_ids: Dict[int, int] = {}
-        for tok, assistant_id in assistant_vocab.items():
+        print(f'{random_overlap=}')
+        if random_overlap != -1:
+            # Calculate the number of items to select
+            num_items = int(len(assistant_vocab) * (random_overlap / 100))
+            # Randomly select items
+            vocab = dict(random.sample(assistant_vocab.items(), num_items))
+        else:
+            vocab = assistant_vocab
+        for tok, assistant_id in vocab.items():
             target_id = target_vocab.get(tok)
             if target_id is not None:
                 assistant_to_target_input_ids[assistant_id] = target_id
