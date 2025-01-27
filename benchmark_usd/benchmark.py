@@ -422,7 +422,7 @@ def main():
     # qwen_checkpoint = "Qwen/Qwen2.5-0.5B-Instruct"
     # llama_assistant_checkpoint = "meta-llama/Llama-3.2-1B-Instruct"
     # llama_3b_assistant_checkpoint = "meta-llama/Llama-3.2-3B-Instruct"
-    target_model_checkpoint = "google/gemma-2-9b-it"
+    target_model_checkpoint = "google/gemma-2-27b-it"
     assistant_hom_checkpoint = "google/gemma-2-2b-it"
     assistant_het_checkpoint = "double7/vicuna-68m"
 
