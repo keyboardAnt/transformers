@@ -37,10 +37,10 @@ def set_hf_cache_env():
     Sets the environment variables for Hugging Face caching
     and creates the corresponding directories.
     """
-    print("Cache location:")
+    print("Cache location:", flush=True)
     hf_home = os.environ["HF_HOME"]  # Store in variable for clarity
     os.makedirs(hf_home, exist_ok=True)
-    print(hf_home)
+    print(hf_home, flush=True)
 
 
 def login_to_hf(token_env_var: str = "HF_ACCESS_TOKEN"):
@@ -74,28 +74,28 @@ def log_hardware_info(filepath: str):
     try:
         with open(filepath, "w") as log_file:
             hostname = os.uname().nodename
-            print(f"Hostname: {hostname}")
+            print(f"Hostname: {hostname}", flush=True)
             log_file.write(f"Hostname: {hostname}\n")
 
             # Get GPU details using nvidia-smi
             gpu_info = subprocess.run(["nvidia-smi"], capture_output=True, text=True)
-            print(f"GPU Details:\n{gpu_info.stdout}")
+            print(f"GPU Details:\n{gpu_info.stdout}", flush=True)
             log_file.write("\nGPU Details:\n" + gpu_info.stdout)
 
             # Get GPU memory usage
             gpu_memory_info = subprocess.run(["nvidia-smi", "--query-gpu=memory.used,memory.free", "--format=csv,noheader"], capture_output=True, text=True)
-            print(f"GPU Memory Usage:\n{gpu_memory_info.stdout}")
+            print(f"GPU Memory Usage:\n{gpu_memory_info.stdout}", flush=True)
             log_file.write("\nGPU Memory Usage:\n" + gpu_memory_info.stdout)
 
             # Get CPU details using lscpu
             cpu_info = subprocess.run(["lscpu"], capture_output=True, text=True)
-            print(f"CPU Details:\n{cpu_info.stdout}")
+            print(f"CPU Details:\n{cpu_info.stdout}", flush=True)
             log_file.write("\nCPU Details:\n" + cpu_info.stdout)
 
-        print(f"Hardware information saved to {filepath}")
+        print(f"Hardware information saved to {filepath}", flush=True)
 
     except Exception as e:
-        print(f"Error logging hardware information: {e}")
+        print(f"Error logging hardware information: {e}", flush=True)
 
 
 def clear_memory():
@@ -120,14 +120,14 @@ def clear_memory():
 
         # Print memory stats for debugging (optional)
         for i in range(torch.cuda.device_count()):
-            print(f"GPU {i} memory allocated: {torch.cuda.memory_allocated(i) / 1e9:.2f}GB")
-            print(f"GPU {i} memory cached: {torch.cuda.memory_reserved(i) / 1e9:.2f}GB")
+            print(f"GPU {i} memory allocated: {torch.cuda.memory_allocated(i) / 1e9:.2f}GB", flush=True)
+            print(f"GPU {i} memory cached: {torch.cuda.memory_reserved(i) / 1e9:.2f}GB", flush=True)
 
     # Reset the PyTorch CPU memory allocator
     if hasattr(torch, "cuda"):
         torch.cuda.empty_cache()
 
-    print("Memory cleared: Python memory garbage collected and GPU cache emptied.")
+    print("Memory cleared: Python memory garbage collected and GPU cache emptied.", flush=True)
 
 
 # ------------------------------------------------------------------------------
@@ -300,9 +300,9 @@ class HFModel:
         # Move to model device if necessary
         new_token_ids = new_token_ids.to(self.model.device)
         generated_text = self.tokenizer.decode(new_token_ids, skip_special_tokens=True)
-        print("=" * 50)
-        print("Generated text:\n", generated_text)
-        print("=" * 50)
+        print("=" * 50, flush=True)
+        print("Generated text:\n", generated_text, flush=True)
+        print("=" * 50, flush=True)
 
         tpot: float = float("inf")
         if len(new_token_ids) > 1:
@@ -311,7 +311,7 @@ class HFModel:
         # Make sure to set a timeout for join to prevent hanging
         thread.join(timeout=300)  # 5 minute timeout
         if thread.is_alive():
-            print("Warning: Generation thread did not complete within timeout")
+            print("Warning: Generation thread did not complete within timeout", flush=True)
 
         return Result(
             tok_ids_prompt=inputs["input_ids"][0].tolist(),
@@ -331,48 +331,48 @@ def tokenizers_are_identical(t1, t2) -> bool:
     """
     # 1. Same Python object?
     if t1 is t2:
-        print("✓ Tokenizers are the same Python object")
+        print("✓ Tokenizers are the same Python object", flush=True)
         return True
 
     # 2. Same class?
     if type(t1) != type(t2):
-        print(f"✗ Different tokenizer classes: {type(t1)} vs {type(t2)}")
+        print(f"✗ Different tokenizer classes: {type(t1)} vs {type(t2)}", flush=True)
         return False
 
     # 3. Compare vocabulary
     vocab1 = t1.get_vocab()
     vocab2 = t2.get_vocab()
     if len(vocab1) != len(vocab2):
-        print(f"✗ Different vocabulary sizes: {len(vocab1)} vs {len(vocab2)}")
+        print(f"✗ Different vocabulary sizes: {len(vocab1)} vs {len(vocab2)}", flush=True)
         return False
 
     # Check each token's ID
     for token, idx in vocab1.items():
         if token not in vocab2 or vocab2[token] != idx:
-            print(f"✗ Token mismatch: '{token}' has different IDs ({idx} vs {vocab2.get(token, 'missing')})")
+            print(f"✗ Token mismatch: '{token}' has different IDs ({idx} vs {vocab2.get(token, 'missing')})", flush=True)
             return False
 
     # Check for extra tokens in t2
     for token, idx in vocab2.items():
         if token not in vocab1 or vocab1[token] != idx:
-            print(f"✗ Extra token in t2: '{token}' with ID {idx}")
+            print(f"✗ Extra token in t2: '{token}' with ID {idx}", flush=True)
             return False
 
     # 4. Compare merges
     merges_t1 = getattr(t1, "merges", None)
     merges_t2 = getattr(t2, "merges", None)
     if merges_t1 != merges_t2:
-        print("✗ Different merges rules")
+        print("✗ Different merges rules", flush=True)
         return False
 
     # 5. Compare special tokens
     if t1.special_tokens_map != t2.special_tokens_map:
-        print("✗ Different special tokens maps:")
-        print(f"  T1: {t1.special_tokens_map}")
-        print(f"  T2: {t2.special_tokens_map}")
+        print("✗ Different special tokens maps:", flush=True)
+        print(f"  T1: {t1.special_tokens_map}", flush=True)
+        print(f"  T2: {t2.special_tokens_map}", flush=True)
         return False
 
-    print("✓ Tokenizers are identical")
+    print("✓ Tokenizers are identical", flush=True)
     return True
 
 
@@ -396,7 +396,7 @@ def generate_assisted(
         are_tokenizers_identical: bool = tokenizers_are_identical(
             target_model_obj.tokenizer, assistant_model_obj.tokenizer
         )
-        print("Tokenizers are identical:", are_tokenizers_identical)
+        print("Tokenizers are identical:", are_tokenizers_identical, flush=True)
         if not are_tokenizers_identical:
             generate_kwargs["assistant_tokenizer"] = assistant_model_obj.tokenizer
             generate_kwargs["tokenizer"] = target_model_obj.tokenizer
@@ -447,10 +447,10 @@ def main():
     dataset_path = "cnn_dailymail"
     dataset_name = "3.0.0"
     dataset_split = "validation"
-    print("Loading dataset:")
-    print(f"Dataset path: {dataset_path}")
-    print(f"Dataset name: {dataset_name}")
-    print(f"Dataset split: {dataset_split}")
+    print("Loading dataset:", flush=True)
+    print(f"Dataset path: {dataset_path}", flush=True)
+    print(f"Dataset name: {dataset_name}", flush=True)
+    print(f"Dataset split: {dataset_split}", flush=True)
     dataset = load_dataset(path=dataset_path, name=dataset_name, split=dataset_split, trust_remote_code=True)
     dataset_sample = dataset.take(args.num_of_examples)
 
@@ -465,22 +465,22 @@ def main():
         prompt = f"Summarize the following article.\nArticle:\n{example['article']}\nSummary:\n"
         ##############################################################################
 
-        print("=" * 100)
-        print(f"Running input prompt {i}...")
-        print("Prompt:\n", prompt)
-        print("=" * 100)
+        print("=" * 100, flush=True)
+        print(f"Running input prompt {i}...", flush=True)
+        print("Prompt:\n", prompt, flush=True)
+        print("=" * 100, flush=True)
 
-        print(f"Running AR with `do_sample=False` for {gemma_9b_target_checkpoint}...")
+        print(f"Running AR with `do_sample=False` for {gemma_9b_target_checkpoint}...", flush=True)
         ar_do_sample_false_result = generate_assisted(
             prompt=prompt, do_sample=False, target_model_obj=gemma_9b_target_obj
         )
 
-        print(f"Running AR with `do_sample=True` for {gemma_9b_target_checkpoint}...")
+        print(f"Running AR with `do_sample=True` for {gemma_9b_target_checkpoint}...", flush=True)
         ar_do_sample_true_result = generate_assisted(
             prompt=prompt, do_sample=True, target_model_obj=gemma_9b_target_obj
         )
 
-        print(f"Running SLEM (assisted generation with `do_sample=False`) for {gemma_9b_target_checkpoint} with {vicuna_68m_assistant_checkpoint}...")
+        print(f"Running SLEM (assisted generation with `do_sample=False`) for {gemma_9b_target_checkpoint} with {vicuna_68m_assistant_checkpoint}...", flush=True)
         slem_result = generate_assisted(
             prompt=prompt,
             target_model_obj=gemma_9b_target_obj,
@@ -488,7 +488,7 @@ def main():
             assistant_model_obj=vicuna_68m_assistant_obj,
         )
 
-        print(f"Running TLI (assisted generation with `do_sample=False`) for {gemma_9b_target_checkpoint} with {vicuna_68m_assistant_checkpoint}...")
+        print(f"Running TLI (assisted generation with `do_sample=False`) for {gemma_9b_target_checkpoint} with {vicuna_68m_assistant_checkpoint}...", flush=True)
         tli_do_sample_false_result = generate_assisted(
             prompt=prompt,
             target_model_obj=gemma_9b_target_obj,
@@ -497,7 +497,7 @@ def main():
             assistant_model_obj=vicuna_68m_assistant_obj,
         )
 
-        print(f"Running TLI (assisted generation with `do_sample=True`) for {gemma_9b_target_checkpoint} with {vicuna_68m_assistant_checkpoint}...")
+        print(f"Running TLI (assisted generation with `do_sample=True`) for {gemma_9b_target_checkpoint} with {vicuna_68m_assistant_checkpoint}...", flush=True)
         tli_do_sample_true_result = generate_assisted(
             prompt=prompt,
             target_model_obj=gemma_9b_target_obj,
@@ -505,7 +505,7 @@ def main():
             assistant_model_obj=vicuna_68m_assistant_obj,
         )
 
-        print(f"Running SD (assisted generation with `do_sample=False`) for {gemma_9b_target_checkpoint} with {gemma_2b_assistant_checkpoint}...")
+        print(f"Running SD (assisted generation with `do_sample=False`) for {gemma_9b_target_checkpoint} with {gemma_2b_assistant_checkpoint}...", flush=True)
         sd_do_sample_false_result = generate_assisted(
             prompt=prompt,
             target_model_obj=gemma_9b_target_obj,
@@ -513,7 +513,7 @@ def main():
             assistant_model_obj=gemma_2b_assistant_obj,
         )
 
-        print(f"Running SD (assisted generation with `do_sample=True`) for {gemma_9b_target_checkpoint} with {gemma_2b_assistant_checkpoint}...")
+        print(f"Running SD (assisted generation with `do_sample=True`) for {gemma_9b_target_checkpoint} with {gemma_2b_assistant_checkpoint}...", flush=True)
         sd_do_sample_true_result = generate_assisted(
             prompt=prompt,
             target_model_obj=gemma_9b_target_obj,
@@ -555,21 +555,21 @@ def main():
             }
         )
 
-        print(f"Results for prompt {i}:")
+        print(f"Results for prompt {i}:", flush=True)
         pprint(results[-1])
 
-        print("TTFT stats:")
+        print("TTFT stats:", flush=True)
         ttft_values = [v for k, v in results[-1].items() if "TTFT" in k]
         ttft_mean = np.mean(ttft_values)
         ttft_std = np.std(ttft_values)
-        print("Mean: ", ttft_mean)
-        print("Std: ", ttft_std)
-        print("Their ratio (std/mean): ", ttft_std / ttft_mean)
-        print("Min: ", np.min(ttft_values))
-        print("Max: ", np.max(ttft_values))
-        print("Median: ", np.median(ttft_values))
+        print("Mean: ", ttft_mean, flush=True)
+        print("Std: ", ttft_std, flush=True)
+        print("Their ratio (std/mean): ", ttft_std / ttft_mean, flush=True)
+        print("Min: ", np.min(ttft_values), flush=True)
+        print("Max: ", np.max(ttft_values), flush=True)
+        print("Median: ", np.median(ttft_values), flush=True)
 
-        print("TPOTs small to large:")
+        print("TPOTs small to large:", flush=True)
         tpots = {k: v for k, v in results[-1].items() if "TPOT" in k}
         sorted_tpots = sorted(tpots.items(), key=lambda x: x[1])
         pprint(sorted_tpots)
@@ -581,7 +581,7 @@ def main():
     dataset_info = f"{dataset_path}_{dataset_name}_{dataset_split}".replace("/", "-")
     filename_results = os.path.join(dirpath, f"latency_benchmark_on_{dataset_info}_{args.num_of_examples}_examples.csv")
     df_results.to_csv(filename_results, index=False)
-    print(f"Results saved to {filename_results}")
+    print(f"Results saved to {filename_results}", flush=True)
 
 
 if __name__ == "__main__":
