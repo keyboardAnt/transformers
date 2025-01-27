@@ -72,25 +72,20 @@ def log_hardware_info(filepath: str):
         log_filename (str): Name of the file where hardware details will be logged.
     """
     try:
-        with open(filepath, "w") as log_file:
-            hostname = os.uname().nodename
-            print(f"Hostname: {hostname}", flush=True)
-            log_file.write(f"Hostname: {hostname}\n")
+        hostname = os.uname().nodename
+        print(f"Hostname: {hostname}", flush=True)
 
-            # Get GPU details using nvidia-smi
-            gpu_info = subprocess.run(["nvidia-smi"], capture_output=True, text=True)
-            print(f"GPU Details:\n{gpu_info.stdout}", flush=True)
-            log_file.write("\nGPU Details:\n" + gpu_info.stdout)
+        # Get GPU details using nvidia-smi
+        gpu_info = subprocess.run(["nvidia-smi"], capture_output=True, text=True)
+        print(f"GPU Details:\n{gpu_info.stdout}", flush=True)
 
-            # Get GPU memory usage
-            gpu_memory_info = subprocess.run(["nvidia-smi", "--query-gpu=memory.used,memory.free", "--format=csv,noheader"], capture_output=True, text=True)
-            print(f"GPU Memory Usage:\n{gpu_memory_info.stdout}", flush=True)
-            log_file.write("\nGPU Memory Usage:\n" + gpu_memory_info.stdout)
+        # Get GPU memory usage
+        gpu_memory_info = subprocess.run(["nvidia-smi", "--query-gpu=memory.used,memory.free", "--format=csv,noheader"], capture_output=True, text=True)
+        print(f"GPU Memory Usage:\n{gpu_memory_info.stdout}", flush=True)
 
-            # Get CPU details using lscpu
-            cpu_info = subprocess.run(["lscpu"], capture_output=True, text=True)
-            print(f"CPU Details:\n{cpu_info.stdout}", flush=True)
-            log_file.write("\nCPU Details:\n" + cpu_info.stdout)
+        # Get CPU details using lscpu
+        cpu_info = subprocess.run(["lscpu"], capture_output=True, text=True)
+        print(f"CPU Details:\n{cpu_info.stdout}", flush=True)
 
         print(f"Hardware information saved to {filepath}", flush=True)
 
@@ -417,6 +412,11 @@ def main():
 
     # 3. Parse arguments
     args = parse_args()
+    print("=" * 100, flush=True)
+    print(f"{args=}", flush=True)
+    print("=" * 20, flush=True)
+    print(f"{locals()=}", flush=True)
+    print("=" * 100, flush=True)
 
     # Create output directory if it doesn't exist
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
