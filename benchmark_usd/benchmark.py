@@ -224,7 +224,9 @@ class HFModel:
         clear_memory()
 
         # Tokenize the input prompt and move it to the model's device
-        inputs = self.tokenizer(prompt, return_tensors="pt", return_attention_mask=True).to(self.model.device)
+        inputs = self.tokenizer(prompt, return_tensors="pt", return_attention_mask=True)
+        inputs["input_ids"] = inputs["input_ids"].to(self.model.device, dtype=torch.int64)
+
         prompt_len = inputs["input_ids"].shape[1]
 
         # Create a streamer for raw token IDs (instead of TextIteratorStreamer)
@@ -233,7 +235,8 @@ class HFModel:
         # Handle the attention mask to ensure valid memory alignment
         attention_mask = inputs.get("attention_mask")
         if attention_mask is None:
-            attention_mask = torch.ones_like(inputs["input_ids"], dtype=self.model.dtype, device=self.model.device)
+            attention_mask = torch.ones_like(inputs["input_ids"], dtype=torch.int64)
+        attention_mask = attention_mask.to(self.model.device)
 
         generation_kwargs = dict(
             inputs=inputs["input_ids"],
@@ -285,7 +288,7 @@ class HFModel:
             # E.g. [tensor([101, 102]), tensor([103]), tensor([104, 105])]
             new_token_ids = torch.cat(new_token_ids_tensors, dim=0)  # shape=(N,)
         else:
-            new_token_ids = torch.empty(0, dtype=torch.long, device=self.model.device)
+            new_token_ids = torch.empty(0, dtype=torch.int64, device=self.model.device)
 
         # Move to model device if necessary
         new_token_ids = new_token_ids.to(self.model.device)
