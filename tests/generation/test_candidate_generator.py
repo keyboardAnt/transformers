@@ -11,7 +11,6 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
 from transformers.generation.candidate_generator import (
     AssistantToTargetTranslator,
     AssistantVocabTranslatorCache,
-    AssistedCandidateGeneratorDifferentTokenizers,
     UniversalSpeculativeDecodingGenerator,
 )
 
