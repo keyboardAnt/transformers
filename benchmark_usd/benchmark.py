@@ -372,7 +372,7 @@ def tokenizers_are_identical(t1, t2) -> bool:
 
 
 def generate_assisted(
-    prompt: str, target_model_obj: HFModel, do_sample: bool, assistant_model_obj: Optional[HFModel] = None
+    prompt: str, target_model_obj: HFModel, temperature: float, assistant_model_obj: Optional[HFModel] = None
 ):
     """
     Demonstrates an assisted generation approach:
@@ -390,6 +390,9 @@ def generate_assisted(
         if not are_tokenizers_identical:
             generate_kwargs["assistant_tokenizer"] = assistant_model_obj.tokenizer
             generate_kwargs["tokenizer"] = target_model_obj.tokenizer
+    do_sample: bool = temperature != 0.0
+    if do_sample is True:
+        generate_kwargs["temperature"] = temperature
     return target_model_obj.generate_text(prompt=prompt, do_sample=do_sample, **generate_kwargs)
 
 
@@ -463,88 +466,87 @@ def main():
         print("Prompt:\n", prompt, flush=True)
         print("=" * 100, flush=True)
 
-        print(f"Running AR with `do_sample=False` for {gemma_9b_target_checkpoint}...", flush=True)
+        print(f"Running AR with `temp=0.0` for {gemma_9b_target_checkpoint}...", flush=True)
         ar_do_sample_false_result = generate_assisted(
-            prompt=prompt, do_sample=False, target_model_obj=gemma_9b_target_obj
+            prompt=prompt, temperature=0.0, target_model_obj=gemma_9b_target_obj
         )
 
-        print(f"Running AR with `do_sample=True` for {gemma_9b_target_checkpoint}...", flush=True)
+        print(f"Running AR with `temp=1.0` for {gemma_9b_target_checkpoint}...", flush=True)
         ar_do_sample_true_result = generate_assisted(
-            prompt=prompt, do_sample=True, target_model_obj=gemma_9b_target_obj
+            prompt=prompt, temperature=1.0, target_model_obj=gemma_9b_target_obj
         )
 
-        print(f"Running SLEM (assisted generation with `do_sample=False`) for {gemma_9b_target_checkpoint} with {vicuna_68m_assistant_checkpoint}...", flush=True)
+        print(f"Running SLEM (assisted generation with `temp=0.0`) for {gemma_9b_target_checkpoint} with {vicuna_68m_assistant_checkpoint}...", flush=True)
         slem_result = generate_assisted(
             prompt=prompt,
             target_model_obj=gemma_9b_target_obj,
-            do_sample=False,
+            temperature=0.0,
             assistant_model_obj=vicuna_68m_assistant_obj,
         )
 
-        print(f"Running TLI (assisted generation with `do_sample=False`) for {gemma_9b_target_checkpoint} with {vicuna_68m_assistant_checkpoint}...", flush=True)
+        print(f"Running TLI (assisted generation with `temp=1e-7`) for {gemma_9b_target_checkpoint} with {vicuna_68m_assistant_checkpoint}...", flush=True)
         tli_do_sample_false_result = generate_assisted(
             prompt=prompt,
             target_model_obj=gemma_9b_target_obj,
-            # TODO: Set `do_sample=True` and the temperature to `1e-7`
-            do_sample=False, 
+            temperature=1e-7,
             assistant_model_obj=vicuna_68m_assistant_obj,
         )
 
-        print(f"Running TLI (assisted generation with `do_sample=True`) for {gemma_9b_target_checkpoint} with {vicuna_68m_assistant_checkpoint}...", flush=True)
+        print(f"Running TLI (assisted generation with `temp=1.0`) for {gemma_9b_target_checkpoint} with {vicuna_68m_assistant_checkpoint}...", flush=True)
         tli_do_sample_true_result = generate_assisted(
             prompt=prompt,
             target_model_obj=gemma_9b_target_obj,
-            do_sample=True,
+            temperature=1.0,
             assistant_model_obj=vicuna_68m_assistant_obj,
         )
 
-        print(f"Running SD (assisted generation with `do_sample=False`) for {gemma_9b_target_checkpoint} with {gemma_2b_assistant_checkpoint}...", flush=True)
+        print(f"Running SD (assisted generation with `temp=0.0`) for {gemma_9b_target_checkpoint} with {gemma_2b_assistant_checkpoint}...", flush=True)
         sd_do_sample_false_result = generate_assisted(
             prompt=prompt,
             target_model_obj=gemma_9b_target_obj,
-            do_sample=False,
+            temperature=0.0,
             assistant_model_obj=gemma_2b_assistant_obj,
         )
 
-        print(f"Running SD (assisted generation with `do_sample=True`) for {gemma_9b_target_checkpoint} with {gemma_2b_assistant_checkpoint}...", flush=True)
+        print(f"Running SD (assisted generation with `temp=1.0`) for {gemma_9b_target_checkpoint} with {gemma_2b_assistant_checkpoint}...", flush=True)
         sd_do_sample_true_result = generate_assisted(
             prompt=prompt,
             target_model_obj=gemma_9b_target_obj,
-            do_sample=True,
+            temperature=1.0,
             assistant_model_obj=gemma_2b_assistant_obj,
         )
 
         # Collect results
         results.append(
             {
-                "AR `do_sample=False` TPOT": ar_do_sample_false_result.tpot_s,
-                "AR `do_sample=False` TTFT": ar_do_sample_false_result.ttft_s,
-                "AR `do_sample=False` Len Inp": len(ar_do_sample_false_result.tok_ids_prompt),
-                "AR `do_sample=False` New Toks": len(ar_do_sample_false_result.tok_ids_new),
-                "AR `do_sample=True` TPOT": ar_do_sample_true_result.tpot_s,
-                "AR `do_sample=True` TTFT": ar_do_sample_true_result.ttft_s,
-                "AR `do_sample=True` Len Inp": len(ar_do_sample_true_result.tok_ids_prompt),
-                "AR `do_sample=True` New Toks": len(ar_do_sample_true_result.tok_ids_new),
-                "TLI `do_sample=False` TPOT": tli_do_sample_false_result.tpot_s,
-                "TLI `do_sample=False` TTFT": tli_do_sample_false_result.ttft_s,
-                "TLI `do_sample=False` Len Inp": len(tli_do_sample_false_result.tok_ids_prompt),
-                "TLI `do_sample=False` New Toks": len(tli_do_sample_false_result.tok_ids_new),
-                "TLI `do_sample=True` TPOT": tli_do_sample_true_result.tpot_s,
-                "TLI `do_sample=True` TTFT": tli_do_sample_true_result.ttft_s,
-                "TLI `do_sample=True` Len Inp": len(tli_do_sample_true_result.tok_ids_prompt),
-                "TLI `do_sample=True` New Toks": len(tli_do_sample_true_result.tok_ids_new),
+                "AR `temp=0.0` TPOT": ar_do_sample_false_result.tpot_s,
+                "AR `temp=0.0` TTFT": ar_do_sample_false_result.ttft_s,
+                "AR `temp=0.0` Len Inp": len(ar_do_sample_false_result.tok_ids_prompt),
+                "AR `temp=0.0` New Toks": len(ar_do_sample_false_result.tok_ids_new),
+                "AR `temp=1.0` TPOT": ar_do_sample_true_result.tpot_s,
+                "AR `temp=1.0` TTFT": ar_do_sample_true_result.ttft_s,
+                "AR `temp=1.0` Len Inp": len(ar_do_sample_true_result.tok_ids_prompt),
+                "AR `temp=1.0` New Toks": len(ar_do_sample_true_result.tok_ids_new),
+                "TLI `temp=1e-7` TPOT": tli_do_sample_false_result.tpot_s,
+                "TLI `temp=1e-7` TTFT": tli_do_sample_false_result.ttft_s,
+                "TLI `temp=1e-7` Len Inp": len(tli_do_sample_false_result.tok_ids_prompt),
+                "TLI `temp=1e-7` New Toks": len(tli_do_sample_false_result.tok_ids_new),
+                "TLI `temp=1.0` TPOT": tli_do_sample_true_result.tpot_s,
+                "TLI `temp=1.0` TTFT": tli_do_sample_true_result.ttft_s,
+                "TLI `temp=1.0` Len Inp": len(tli_do_sample_true_result.tok_ids_prompt),
+                "TLI `temp=1.0` New Toks": len(tli_do_sample_true_result.tok_ids_new),
                 "SLEM TPOT": slem_result.tpot_s,
                 "SLEM TTFT": slem_result.ttft_s,
                 "SLEM Len Inp": len(slem_result.tok_ids_prompt),
                 "SLEM New Toks": len(slem_result.tok_ids_new),
-                "SD `do_sample=False` TPOT": sd_do_sample_false_result.tpot_s,
-                "SD `do_sample=False` TTFT": sd_do_sample_false_result.ttft_s,
-                "SD `do_sample=False` Len Inp": len(sd_do_sample_false_result.tok_ids_prompt),
-                "SD `do_sample=False` New Toks": len(sd_do_sample_false_result.tok_ids_new),
-                "SD `do_sample=True` TPOT": sd_do_sample_true_result.tpot_s,
-                "SD `do_sample=True` TTFT": sd_do_sample_true_result.ttft_s,
-                "SD `do_sample=True` Len Inp": len(sd_do_sample_true_result.tok_ids_prompt),
-                "SD `do_sample=True` New Toks": len(sd_do_sample_true_result.tok_ids_new),
+                "SD `temp=0.0` TPOT": sd_do_sample_false_result.tpot_s,
+                "SD `temp=0.0` TTFT": sd_do_sample_false_result.ttft_s,
+                "SD `temp=0.0` Len Inp": len(sd_do_sample_false_result.tok_ids_prompt),
+                "SD `temp=0.0` New Toks": len(sd_do_sample_false_result.tok_ids_new),
+                "SD `temp=1.0` TPOT": sd_do_sample_true_result.tpot_s,
+                "SD `temp=1.0` TTFT": sd_do_sample_true_result.ttft_s,
+                "SD `temp=1.0` Len Inp": len(sd_do_sample_true_result.tok_ids_prompt),
+                "SD `temp=1.0` New Toks": len(sd_do_sample_true_result.tok_ids_new),
             }
         )
 
