@@ -414,9 +414,8 @@ def main():
     args = parse_args()
     print("=" * 100, flush=True)
     print(f"{args=}", flush=True)
-    print("=" * 20, flush=True)
-    print(f"{locals()=}", flush=True)
     print("=" * 100, flush=True)
+    
 
     # Create output directory if it doesn't exist
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -427,7 +426,7 @@ def main():
     # 4. Log hardware info
     log_hardware_info(f"{dirpath}/benchmark_hardware_info.log")
 
-    # 5. Load models
+    # 5. models
     # target_checkpoint = "meta-llama/Llama-3.1-70B-Instruct"
     # qwen_checkpoint = "Qwen/Qwen2.5-0.5B-Instruct"
     # llama_assistant_checkpoint = "meta-llama/Llama-3.2-1B-Instruct"
@@ -436,10 +435,6 @@ def main():
     vicuna_68m_assistant_checkpoint = "double7/vicuna-68m"
     gemma_2b_assistant_checkpoint = "google/gemma-2-2b-it"
 
-    gemma_9b_target_obj = HFModel(gemma_9b_target_checkpoint)
-    vicuna_68m_assistant_obj = HFModel(vicuna_68m_assistant_checkpoint)
-    gemma_2b_assistant_obj = HFModel(gemma_2b_assistant_checkpoint)
-
     # 6. Load dataset
     # dataset_path = "tau/scrolls"
     # dataset_name = "qasper"
@@ -447,6 +442,16 @@ def main():
     dataset_path = "cnn_dailymail"
     dataset_name = "3.0.0"
     dataset_split = "validation"
+
+    print("=" * 100, flush=True)
+    print(f"{locals()=}", flush=True)
+    print("=" * 100, flush=True)
+
+    print("Loading models:", flush=True)
+    gemma_9b_target_obj = HFModel(gemma_9b_target_checkpoint)
+    vicuna_68m_assistant_obj = HFModel(vicuna_68m_assistant_checkpoint)
+    gemma_2b_assistant_obj = HFModel(gemma_2b_assistant_checkpoint)
+
     print("Loading dataset:", flush=True)
     print(f"Dataset path: {dataset_path}", flush=True)
     print(f"Dataset name: {dataset_name}", flush=True)
