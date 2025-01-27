@@ -1,0 +1,129 @@
+syntax = "proto3";
+
+package benchmark;
+
+// Service Definitions
+service ExperimentService {
+  // Initiates the experiment with specified models, dataset, and hardware
+  rpc RunExperiment(RunExperimentRequest) returns (RunExperimentResponse);
+}
+
+service AnalysisService {
+  // Analyzes stored experiment results and computes metrics
+  rpc AnalyzeExperiment(AnalyzeExperimentRequest) returns (AnalyzeExperimentResponse);
+}
+
+// Common Messages
+message ModelGenerationConfig {
+  float temperature = 1;  // Temperature for generation
+  optional int32 max_new_tokens = 2;  // Maximum new tokens to generate
+}
+
+message Model {
+  string hf_path = 1;  // HuggingFace model path
+  ModelGenerationConfig generation_config = 2;  // Generation parameters
+}
+
+message Dataset {
+  string path = 1;  // Dataset path (e.g., "tau/scrolls")
+  string name = 2;  // Dataset name (e.g., "qasper")
+  string split = 3;  // Dataset split (e.g., "test")
+  int32 num_examples = 4;  // Number of examples to process
+}
+
+message HardwareRequest {
+  // GPU requirements
+  optional string gpu_type = 1;  // e.g., "A100"
+  int32 gpu_count = 2;  // Maps to -gpu "num=X"
+  int32 gpu_memory_gb = 3;  // Maps to -gpu "gmem=XGB"
+  bool gpu_exclusive = 4;  // Maps to "j_exclusive=yes"
+
+  // CPU & Memory requirements
+  int32 cpu_cores = 5;  // Maps to -R "affinity[core(X)]"
+  int32 memory_gb = 6;  // Maps to both -R "rusage[mem=XGB]" and -M XGB
+  
+  // Queue and host requirements
+  repeated string queue_names = 7;  // Maps to -q "queue1 queue2 ..."
+  int32 num_hosts = 8;  // Maps to -R "span[hosts=1]"
+  
+  // Process count
+  int32 num_processes = 9;  // Maps to -n X
+  
+  // Additional LSF specifications
+  optional string rusage_string = 10;  // Full -R "rusage[...]" string if needed
+  optional string resource_string = 11;  // Additional -R requirements
+}
+
+message HardwareResponse {
+  // LSF job info
+  string job_id = 1;  // LSF job ID
+  string queue_name = 2;  // Actual queue assigned
+  string submission_time = 3;  // When job was submitted
+  string start_time = 4;  // When job started running
+  
+  // Node information
+  string node_name = 5;  // Name of allocated compute node
+  string host_architecture = 6;  // e.g., "x86_64"
+  string os_info = 7;  // OS version
+  
+  // GPU information
+  string gpu_type = 8;  // Actually allocated GPU type
+  int32 gpu_count = 9;  // Number of GPUs allocated
+  string gpu_driver_version = 10;  // NVIDIA driver version
+  string cuda_version = 11;  // CUDA version
+  string network = 12;  // Network type (pcie/nvlink)
+  
+  // Resource usage (populated after job completion)
+  float max_memory_gb = 13;  // Peak memory usage
+  float max_gpu_memory_gb = 14;  // Peak GPU memory usage
+  float cpu_time = 15;  // Total CPU time used
+  float wall_time = 16;  // Wall clock time
+  float avg_cpu_util = 17;  // Average CPU utilization
+  
+  // Environment
+  repeated string loaded_modules = 19;  // List of modules loaded
+  
+  // Full LSF command
+  string bsub_command = 20;  // Complete bsub command used
+}
+
+// Experiment Request/Response
+message RunExperimentRequest {
+  Model target_model = 1;
+  repeated Model drafter_models = 2;
+  Dataset dataset = 3;
+  HardwareRequest hardware_spec = 4;
+}
+
+message RunExperimentResponse {
+  string experiment_id = 1;  // Unique identifier
+  string outputs_dir = 2;  // Directory containing results
+  HardwareResponse allocated_hardware = 3;  // Actually allocated hardware
+  string start_time = 4;  // ISO 8601 timestamp
+}
+
+// Individual Result
+message ExperimentResult {
+  RunExperimentRequest config = 1;  // Original configuration
+  int32 example_id = 2;
+  string prompt = 3;  // Input prompt
+  string generated_text = 4;  // Generated output
+  
+  message Metrics {
+    int32 input_tokens = 1;
+    int32 output_tokens = 2;
+    float ttft_seconds = 3;  // Time to First Token
+    float tpot_seconds = 4;  // Time per Output Token
+    float total_time_seconds = 5;
+  }
+  Metrics metrics = 5;
+}
+
+// Analysis Request/Response
+message AnalyzeExperimentRequest {
+  string experiment_id = 1;
+}
+
+message AnalyzeExperimentResponse {
+  string report_path = 2;  // Path to detailed report (CSV)
+}
