@@ -422,9 +422,9 @@ def main():
     # qwen_checkpoint = "Qwen/Qwen2.5-0.5B-Instruct"
     # llama_assistant_checkpoint = "meta-llama/Llama-3.2-1B-Instruct"
     # llama_3b_assistant_checkpoint = "meta-llama/Llama-3.2-3B-Instruct"
-    gemma_9b_target_checkpoint = "google/gemma-2-9b-it"
-    vicuna_68m_assistant_checkpoint = "double7/vicuna-68m"
-    gemma_2b_assistant_checkpoint = "google/gemma-2-2b-it"
+    target_model_checkpoint = "google/gemma-2-9b-it"
+    assistant_hom_checkpoint = "google/gemma-2-2b-it"
+    assistant_het_checkpoint = "double7/vicuna-68m"
 
     # 6. Load dataset
     # dataset_path = "tau/scrolls"
@@ -439,9 +439,9 @@ def main():
     print("=" * 100, flush=True)
 
     print("Loading models...", flush=True)
-    gemma_9b_target_obj = HFModel(gemma_9b_target_checkpoint)
-    vicuna_68m_assistant_obj = HFModel(vicuna_68m_assistant_checkpoint)
-    gemma_2b_assistant_obj = HFModel(gemma_2b_assistant_checkpoint)
+    target_model_obj = HFModel(target_model_checkpoint)
+    assistant_hom_obj = HFModel(assistant_hom_checkpoint)
+    assistant_het_obj = HFModel(assistant_het_checkpoint)
 
     print("Loading dataset:", flush=True)
     print(f"Dataset path: {dataset_path}", flush=True)
@@ -466,54 +466,54 @@ def main():
         print("Prompt:\n", prompt, flush=True)
         print("=" * 100, flush=True)
 
-        print(f"Running AR with `temp=0.0` for {gemma_9b_target_checkpoint}...", flush=True)
+        print(f"Running AR with `temp=0.0` for {target_model_checkpoint}...", flush=True)
         ar_do_sample_false_result = generate_assisted(
-            prompt=prompt, temperature=0.0, target_model_obj=gemma_9b_target_obj
+            prompt=prompt, temperature=0.0, target_model_obj=target_model_obj
         )
 
-        print(f"Running AR with `temp=1.0` for {gemma_9b_target_checkpoint}...", flush=True)
+        print(f"Running AR with `temp=1.0` for {target_model_checkpoint}...", flush=True)
         ar_do_sample_true_result = generate_assisted(
-            prompt=prompt, temperature=1.0, target_model_obj=gemma_9b_target_obj
+            prompt=prompt, temperature=1.0, target_model_obj=target_model_obj
         )
 
-        print(f"Running SLEM (assisted generation with `temp=0.0`) for {gemma_9b_target_checkpoint} with {vicuna_68m_assistant_checkpoint}...", flush=True)
+        print(f"Running SLEM (assisted generation with `temp=0.0`) for {target_model_checkpoint} with {assistant_het_checkpoint}...", flush=True)
         slem_result = generate_assisted(
             prompt=prompt,
-            target_model_obj=gemma_9b_target_obj,
+            target_model_obj=target_model_obj,
             temperature=0.0,
-            assistant_model_obj=vicuna_68m_assistant_obj,
+            assistant_model_obj=assistant_het_obj,
         )
 
-        print(f"Running TLI (assisted generation with `temp=1e-7`) for {gemma_9b_target_checkpoint} with {vicuna_68m_assistant_checkpoint}...", flush=True)
+        print(f"Running TLI (assisted generation with `temp=1e-7`) for {target_model_checkpoint} with {assistant_het_checkpoint}...", flush=True)
         tli_do_sample_false_result = generate_assisted(
             prompt=prompt,
-            target_model_obj=gemma_9b_target_obj,
+            target_model_obj=target_model_obj,
             temperature=1e-7,
-            assistant_model_obj=vicuna_68m_assistant_obj,
+            assistant_model_obj=assistant_het_obj,
         )
 
-        print(f"Running TLI (assisted generation with `temp=1.0`) for {gemma_9b_target_checkpoint} with {vicuna_68m_assistant_checkpoint}...", flush=True)
+        print(f"Running TLI (assisted generation with `temp=1.0`) for {target_model_checkpoint} with {assistant_het_checkpoint}...", flush=True)
         tli_do_sample_true_result = generate_assisted(
             prompt=prompt,
-            target_model_obj=gemma_9b_target_obj,
+            target_model_obj=target_model_obj,
             temperature=1.0,
-            assistant_model_obj=vicuna_68m_assistant_obj,
+            assistant_model_obj=assistant_het_obj,
         )
 
-        print(f"Running SD (assisted generation with `temp=0.0`) for {gemma_9b_target_checkpoint} with {gemma_2b_assistant_checkpoint}...", flush=True)
+        print(f"Running SD (assisted generation with `temp=0.0`) for {target_model_checkpoint} with {assistant_hom_checkpoint}...", flush=True)
         sd_do_sample_false_result = generate_assisted(
             prompt=prompt,
-            target_model_obj=gemma_9b_target_obj,
+            target_model_obj=target_model_obj,
             temperature=0.0,
-            assistant_model_obj=gemma_2b_assistant_obj,
+            assistant_model_obj=assistant_hom_obj,
         )
 
-        print(f"Running SD (assisted generation with `temp=1.0`) for {gemma_9b_target_checkpoint} with {gemma_2b_assistant_checkpoint}...", flush=True)
+        print(f"Running SD (assisted generation with `temp=1.0`) for {target_model_checkpoint} with {assistant_hom_checkpoint}...", flush=True)
         sd_do_sample_true_result = generate_assisted(
             prompt=prompt,
-            target_model_obj=gemma_9b_target_obj,
+            target_model_obj=target_model_obj,
             temperature=1.0,
-            assistant_model_obj=gemma_2b_assistant_obj,
+            assistant_model_obj=assistant_hom_obj,
         )
 
         # Collect results
@@ -580,7 +580,7 @@ def main():
 
     # Save to the benchmark_results directory
     dataset_info = f"{dataset_path}_{dataset_name}_{dataset_split}".replace("/", "-")
-    filename_results = os.path.join(dirpath, f"latency_benchmark_on_{dataset_info}_{args.num_of_examples}_examples.csv")
+    filename_results = os.path.join(dirpath, f"latency_benchmark_on_{target_model_checkpoint}_{dataset_info}_{args.num_of_examples}_examples.csv")
     df_results.to_csv(filename_results, index=False)
     print(f"Results saved to {filename_results}", flush=True)
 
