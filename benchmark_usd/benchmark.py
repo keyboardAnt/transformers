@@ -580,7 +580,9 @@ def main():
 
     # Save to the benchmark_results directory
     dataset_info = f"{dataset_path}_{dataset_name}_{dataset_split}".replace("/", "-")
-    filename_results = os.path.join(dirpath, f"latency_benchmark_on_{target_model_checkpoint}_{dataset_info}_{args.num_of_examples}_examples.csv")
+    target_model_info = f"{target_model_checkpoint}".replace("/", "-")
+    filename_results = os.path.join(dirpath, f"latency_benchmark_on_{target_model_info}_{dataset_info}_{args.num_of_examples}_examples.csv")
+    os.makedirs(os.path.dirname(filename_results), exist_ok=True)
     df_results.to_csv(filename_results, index=False)
     print(f"Results saved to {filename_results}", flush=True)
 
