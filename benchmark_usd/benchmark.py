@@ -64,12 +64,9 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def log_hardware_info(filepath: str):
+def log_hardware_info():
     """
     Logs hardware information including hostname, GPU, and CPU details to a file.
-
-    Args:
-        log_filename (str): Name of the file where hardware details will be logged.
     """
     try:
         hostname = os.uname().nodename
@@ -86,8 +83,6 @@ def log_hardware_info(filepath: str):
         # Get CPU details using lscpu
         cpu_info = subprocess.run(["lscpu"], capture_output=True, text=True)
         print(f"CPU Details:\n{cpu_info.stdout}", flush=True)
-
-        print(f"Hardware information saved to {filepath}", flush=True)
 
     except Exception as e:
         print(f"Error logging hardware information: {e}", flush=True)
@@ -415,16 +410,9 @@ def main():
     print("=" * 100, flush=True)
     print(f"{args=}", flush=True)
     print("=" * 100, flush=True)
-    
-
-    # Create output directory if it doesn't exist
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    commit_hash = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"]).decode("utf-8").strip()
-    dirpath = f"benchmark_results/{timestamp}_{commit_hash}"
-    os.makedirs(dirpath, exist_ok=True)
 
     # 4. Log hardware info
-    log_hardware_info(f"{dirpath}/benchmark_hardware_info.log")
+    log_hardware_info()
 
     # 5. models
     # target_checkpoint = "meta-llama/Llama-3.1-70B-Instruct"
@@ -581,6 +569,12 @@ def main():
 
     # 8. Convert to DataFrame & save
     df_results = pd.DataFrame(results)
+
+    # Create output directory if it doesn't exist
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    commit_hash = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"]).decode("utf-8").strip()
+    dirpath = f"benchmark_results/{timestamp}_{commit_hash}"
+    os.makedirs(dirpath, exist_ok=True)
 
     # Save to the benchmark_results directory
     dataset_info = f"{dataset_path}_{dataset_name}_{dataset_split}".replace("/", "-")
