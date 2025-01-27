@@ -447,7 +447,7 @@ def main():
     print(f"{locals()=}", flush=True)
     print("=" * 100, flush=True)
 
-    print("Loading models:", flush=True)
+    print("Loading models...", flush=True)
     gemma_9b_target_obj = HFModel(gemma_9b_target_checkpoint)
     vicuna_68m_assistant_obj = HFModel(vicuna_68m_assistant_checkpoint)
     gemma_2b_assistant_obj = HFModel(gemma_2b_assistant_checkpoint)
