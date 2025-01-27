@@ -422,17 +422,17 @@ def main():
     # qwen_checkpoint = "Qwen/Qwen2.5-0.5B-Instruct"
     # llama_assistant_checkpoint = "meta-llama/Llama-3.2-1B-Instruct"
     # llama_3b_assistant_checkpoint = "meta-llama/Llama-3.2-3B-Instruct"
-    target_model_checkpoint = "google/gemma-2-27b-it"
-    assistant_hom_checkpoint = "google/gemma-2-2b-it"
-    assistant_het_checkpoint = "double7/vicuna-68m"
+    target_model_checkpoint = "microsoft/phi-4"
+    assistant_hom_checkpoint = "microsoft/Phi-3.5-mini-instruct"
+    assistant_het_checkpoint = "Qwen/Qwen2.5-0.5B-Instruct"
 
     # 6. Load dataset
-    # dataset_path = "tau/scrolls"
-    # dataset_name = "qasper"
-    # dataset_split = "test"
-    dataset_path = "cnn_dailymail"
-    dataset_name = "3.0.0"
-    dataset_split = "validation"
+    dataset_path = "tau/scrolls"
+    dataset_name = "qasper"
+    dataset_split = "test"
+    # dataset_path = "cnn_dailymail"
+    # dataset_name = "3.0.0"
+    # dataset_split = "validation"
 
     print("=" * 100, flush=True)
     print(f"{locals()=}", flush=True)
@@ -456,9 +456,9 @@ def main():
         
         # TODO: Select the dataset ###################################################
         # Tau/Scrolls dataset
-        # prompt = example["input"]  # Adjust if the actual prompt field is different
+        prompt = example["input"]  # Adjust if the actual prompt field is different
         # CNN Daily Mail dataset
-        prompt = f"Summarize the following article.\nArticle:\n{example['article']}\nSummary:\n"
+        # prompt = f"Summarize the following article.\nArticle:\n{example['article']}\nSummary:\n"
         ##############################################################################
 
         print("=" * 100, flush=True)
