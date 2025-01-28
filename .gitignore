@@ -167,3 +167,4 @@ tags
 
 # ruff
 .ruff_cache
+benchmark_usd/src/transformers
