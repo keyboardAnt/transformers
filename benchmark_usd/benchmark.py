@@ -457,12 +457,13 @@ def main():
     results: List[Dict[str, float]] = []
     for i, example in enumerate(dataset_sample):
         
-        # TODO: Select the dataset ###################################################
-        # Tau/Scrolls dataset
-        prompt = example["input"]  # Adjust if the actual prompt field is different
-        # CNN Daily Mail dataset
-        # prompt = f"Summarize the following article.\nArticle:\n{example['article']}\nSummary:\n"
-        ##############################################################################
+        match dataset_path:
+            case "tau/scrolls":
+                prompt = f"Summarize the following text:\n{example['input']}\nSummary:\n"
+            case "cnn_dailymail":
+                prompt = f"Summarize the following article:\n{example['article']}\nSummary:\n"
+            case _:
+                raise ValueError(f"Unknown dataset path: {dataset_path}")
 
         print("=" * 100, flush=True)
         print(f"Running input prompt {i}...", flush=True)
