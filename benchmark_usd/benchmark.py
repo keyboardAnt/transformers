@@ -133,6 +133,9 @@ def clear_memory():
         torch.cuda.empty_cache()
 
     print("Memory cleared: Python memory garbage collected and GPU cache emptied.", flush=True)
+    print("Setting up W&B...", flush=True)
+    setup_wandb()
+    print("W&B initialized", flush=True)
 
 
 # ------------------------------------------------------------------------------
