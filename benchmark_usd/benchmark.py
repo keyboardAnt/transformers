@@ -54,18 +54,13 @@ def login_to_hf(token_env_var: str = "HF_ACCESS_TOKEN"):
     login(token=access_token)
 
 
-def setup_wandb():
+def login_wandb():
     """
     Setup Weights & Biases for logging benchmark results.
     """
     print("Setting up W&B...", flush=True)
     wandb.login()
     print("W&B logged in", flush=True)
-    wandb.init(
-        project="llm-benchmarks",
-        name="model-comparison"
-    )
-    print("W&B initialized", flush=True)
 
 
 def parse_args() -> argparse.Namespace:
@@ -133,9 +128,7 @@ def clear_memory():
         torch.cuda.empty_cache()
 
     print("Memory cleared: Python memory garbage collected and GPU cache emptied.", flush=True)
-    print("Setting up W&B...", flush=True)
-    setup_wandb()
-    print("W&B initialized", flush=True)
+    login_wandb()
 
 
 # ------------------------------------------------------------------------------
@@ -418,8 +411,6 @@ def generate_assisted(
     # report a row in the table to W&B
     wandb.log(
         {
-            "Target": target_model_obj.model_name,
-            "Example ID": example_id,
             "Prompt": prompt,
             "Drafter": assistant_model_obj.model_name if assistant_model_obj is not None else "N/A (AR)",
             "Temperature": temperature,
@@ -427,7 +418,8 @@ def generate_assisted(
             "TTFT (ms)": result.ttft_s * 1000,
             "TPOT (ms)": result.tpot_s * 1000,
             "OutToks/Sec": 1 / result.tpot_s,
-        }
+        },
+        step=example_id,
     )
     return result
 
@@ -440,7 +432,7 @@ def generate_assisted(
 def main():
     # 1. Environment setup
     set_hf_cache_env()
-    setup_wandb()
+    login_wandb()
 
     # 2. Login
     login_to_hf()
@@ -463,6 +455,11 @@ def main():
     assistant_hom_checkpoint = "Qwen/Qwen2.5-0.5B-Instruct"
     assistant_het_checkpoint = "double7/vicuna-68m"
 
+    assistants_checkpoints = [
+        assistant_hom_checkpoint,
+        assistant_het_checkpoint,
+    ]
+
     # 6. dataset
     dataset_path = "tau/scrolls"
     dataset_name = "qasper"
@@ -470,6 +467,22 @@ def main():
     # dataset_path = "cnn_dailymail"
     # dataset_name = "3.0.0"
     # dataset_split = "validation"
+
+    wandb.init({
+        "project": "llm-benchmarks",
+        "config": {
+            "target": target_model_checkpoint,
+            "dataset_path": dataset_path,
+            "dataset_name": dataset_name,
+            "dataset_split": dataset_split,
+            "num_of_examples": args.num_of_examples,
+        },
+        "tags": [
+            f"target:{target_model_checkpoint}",
+            f"dataset:{dataset_path}/{dataset_name}/{dataset_split}",
+            f"num_of_examples:{args.num_of_examples}",
+        ]
+    })
 
     print("=" * 100, flush=True)
     print(f"{locals()=}", flush=True)
@@ -479,6 +492,7 @@ def main():
     target_model_obj = HFModel(target_model_checkpoint)
     assistant_hom_obj = HFModel(assistant_hom_checkpoint)
     assistant_het_obj = HFModel(assistant_het_checkpoint)
+    assistants_objs = [assistant_hom_obj, assistant_het_obj]
 
     print("Loading dataset:", flush=True)
     print(f"Dataset path: {dataset_path}", flush=True)
