@@ -19,6 +19,7 @@ from typing import Dict, List, Optional
 import numpy as np
 import pandas as pd
 import torch
+import wandb
 from datasets import load_dataset
 from huggingface_hub import login
 
@@ -51,6 +52,20 @@ def login_to_hf(token_env_var: str = "HF_ACCESS_TOKEN"):
     if not access_token:
         raise ValueError(f"Environment variable {token_env_var} not found.")
     login(token=access_token)
+
+
+def setup_wandb():
+    """
+    Setup Weights & Biases for logging benchmark results.
+    """
+    print("Setting up W&B...", flush=True)
+    wandb.login()
+    print("W&B logged in", flush=True)
+    wandb.init(
+        project="llm-benchmarks",
+        name="model-comparison"
+    )
+    print("W&B initialized", flush=True)
 
 
 def parse_args() -> argparse.Namespace:
@@ -210,7 +225,7 @@ class HFModel:
         self.model = AutoModelForCausalLM.from_pretrained(model_name, device_map=device_map, torch_dtype=torch_dtype)
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
 
-    def generate_text(self, prompt: str, do_sample: bool, max_new_tokens: int = 512, **kwargs):
+    def generate_text(self, prompt: str, do_sample: bool, max_new_tokens: int = 512, **kwargs) -> Result:
         """
         Generate text from the underlying model, measuring detailed latency metrics.
 
@@ -375,8 +390,8 @@ def tokenizers_are_identical(t1, t2) -> bool:
 
 
 def generate_assisted(
-    prompt: str, target_model_obj: HFModel, temperature: float, assistant_model_obj: Optional[HFModel] = None
-):
+    example_id: int, prompt: str, target_model_obj: HFModel, temperature: float, assistant_model_obj: Optional[HFModel] = None
+) -> Result:
     """
     Demonstrates an assisted generation approach:
     Optionally pass an assistant model or additional arguments if there's
@@ -396,7 +411,22 @@ def generate_assisted(
     do_sample: bool = temperature != 0.0
     if do_sample is True:
         generate_kwargs["temperature"] = temperature
-    return target_model_obj.generate_text(prompt=prompt, do_sample=do_sample, **generate_kwargs)
+    result: Result = target_model_obj.generate_text(prompt=prompt, do_sample=do_sample, **generate_kwargs)
+    # report a row in the table to W&B
+    wandb.log(
+        {
+            "Target": target_model_obj.model_name,
+            "Example ID": example_id,
+            "Prompt": prompt,
+            "Drafter": assistant_model_obj.model_name if assistant_model_obj is not None else "N/A (AR)",
+            "Temperature": temperature,
+            "New Toks": len(result.tok_ids_new),
+            "TTFT (ms)": result.ttft_s * 1000,
+            "TPOT (ms)": result.tpot_s * 1000,
+            "OutToks/Sec": 1 / result.tpot_s,
+        }
+    )
+    return result
 
 
 # ------------------------------------------------------------------------------
@@ -407,6 +437,7 @@ def generate_assisted(
 def main():
     # 1. Environment setup
     set_hf_cache_env()
+    setup_wandb()
 
     # 2. Login
     login_to_hf()
@@ -472,16 +503,17 @@ def main():
 
         print(f"Running AR with `temp=0.0` for {target_model_checkpoint}...", flush=True)
         ar_do_sample_false_result = generate_assisted(
-            prompt=prompt, temperature=0.0, target_model_obj=target_model_obj
+            example_id=i, prompt=prompt, temperature=0.0, target_model_obj=target_model_obj
         )
 
         print(f"Running AR with `temp=1.0` for {target_model_checkpoint}...", flush=True)
         ar_do_sample_true_result = generate_assisted(
-            prompt=prompt, temperature=1.0, target_model_obj=target_model_obj
+            example_id=i, prompt=prompt, temperature=1.0, target_model_obj=target_model_obj
         )
 
         print(f"Running SLEM (assisted generation with `temp=0.0`) for {target_model_checkpoint} with {assistant_het_checkpoint}...", flush=True)
         slem_result = generate_assisted(
+            example_id=i,
             prompt=prompt,
             target_model_obj=target_model_obj,
             temperature=0.0,
@@ -490,6 +522,7 @@ def main():
 
         print(f"Running TLI (assisted generation with `temp=1e-7`) for {target_model_checkpoint} with {assistant_het_checkpoint}...", flush=True)
         tli_do_sample_false_result = generate_assisted(
+            example_id=i,
             prompt=prompt,
             target_model_obj=target_model_obj,
             temperature=1e-7,
@@ -498,6 +531,7 @@ def main():
 
         print(f"Running TLI (assisted generation with `temp=1.0`) for {target_model_checkpoint} with {assistant_het_checkpoint}...", flush=True)
         tli_do_sample_true_result = generate_assisted(
+            example_id=i,
             prompt=prompt,
             target_model_obj=target_model_obj,
             temperature=1.0,
@@ -506,6 +540,7 @@ def main():
 
         print(f"Running SD (assisted generation with `temp=0.0`) for {target_model_checkpoint} with {assistant_hom_checkpoint}...", flush=True)
         sd_do_sample_false_result = generate_assisted(
+            example_id=i,
             prompt=prompt,
             target_model_obj=target_model_obj,
             temperature=0.0,
@@ -514,6 +549,7 @@ def main():
 
         print(f"Running SD (assisted generation with `temp=1.0`) for {target_model_checkpoint} with {assistant_hom_checkpoint}...", flush=True)
         sd_do_sample_true_result = generate_assisted(
+            example_id=i,
             prompt=prompt,
             target_model_obj=target_model_obj,
             temperature=1.0,
