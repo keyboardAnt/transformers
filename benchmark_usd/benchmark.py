@@ -1,6 +1,7 @@
 from datetime import datetime
 import os
 import subprocess
+import sys
 
 from dotenv import load_dotenv
 from tqdm import tqdm
@@ -537,7 +538,7 @@ def main():
     df_results: pd.DataFrame = pd.DataFrame()
 
     dataset_config: DatasetConfig
-    for dataset_config in tqdm(experiment_config.dataset_configs, desc="Datasets", position=0, leave=True, disable=True):
+    for dataset_config in tqdm(experiment_config.dataset_configs, desc="Datasets", position=0, leave=True, ascii=True, file=sys.stdout):
         dataset_path = dataset_config.path
         dataset_name = dataset_config.name
         dataset_split = dataset_config.split
@@ -579,13 +580,13 @@ def main():
         wandb_artifact.add(wandb_table, "my_table")
 
         assistant_checkpoints = [None] + assistant_checkpoints
-        for assistant_checkpoint in tqdm(assistant_checkpoints, desc="Assistants", position=1, leave=True, disable=True):
+        for assistant_checkpoint in tqdm(assistant_checkpoints, desc="Assistants", position=1, leave=True, ascii=True, file=sys.stdout):
             print(f"Loading assistant model {assistant_checkpoint}...", flush=True)
             assistant_obj = None if assistant_checkpoint is None else HFModel(assistant_checkpoint)
-            for temperature in tqdm(experiment_config.temperatures, desc="Temperatures", position=2, leave=True, disable=True):
+            for temperature in tqdm(experiment_config.temperatures, desc="Temperatures", position=2, leave=True, ascii=True, file=sys.stdout):
                 # Generation loop
                 results: List[Dict[str, float]] = []
-                for example_id, example in tqdm(enumerate(dataset_sample), desc="Examples", position=3, leave=True, disable=True):
+                for example_id, example in tqdm(enumerate(dataset_sample), desc="Examples", position=3, leave=True, ascii=True, file=sys.stdout):
                     # Get prompt
                     match dataset_path:
                         case "tau/scrolls":
