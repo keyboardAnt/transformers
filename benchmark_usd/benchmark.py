@@ -213,6 +213,11 @@ dataset_configs = {
         name="3.0.0",
         split="validation",
     ),
+    "openai/openai_humaneval": DatasetConfig(
+        path="openai/openai_humaneval",
+        name="openai_humaneval",
+        split="test",
+    ),
 }
 
 @dataclass
@@ -273,7 +278,7 @@ experiment_configs = {
     ),
     "codellama-13b-it": ExperimentConfig(
         target="codellama/CodeLlama-13b-Instruct-hf",
-        dataset_configs=list(dataset_configs.values()),
+        dataset_configs=[DatasetConfig.from_path("openai/openai_humaneval")],
         assistants=["codellama/CodeLlama-7b-Instruct-hf", "bigcode/tiny_starcoder_py"],
         temperatures=[0, 1e-7, 1],
     ),
@@ -632,6 +637,8 @@ def main():
                             prompt = f"Summarize the following text:\n{example['input']}\nSummary:\n"
                         case "cnn_dailymail":
                             prompt = f"Summarize the following article:\n{example['article']}\nSummary:\n"
+                        case "openai/openai_humaneval":
+                            prompt = f"Implement the function so that it passes the tests.\nTests:\n{example['test']}\nFunction:\n{example['prompt']}\n\nYour code:\n"
                         case _:
                             raise ValueError(f"Unknown dataset path: {dataset_path}")
 
