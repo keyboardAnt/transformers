@@ -238,6 +238,15 @@ experiment_configs = {
                     "Qwen/Qwen2.5-0.5B-Instruct"],
         temperatures=[0, 1e-7, 1],
     ),
+    "llama70b": ExperimentConfig(
+        target="meta-llama/Llama-3.1-70B",
+        dataset_configs=list(dataset_configs.values()),
+        assistants=["meta-llama/Llama-3.1-8B", 
+                    "meta-llama/Llama-3.2-3B",
+                    "meta-llama/Llama-3.2-1B",
+                    "Qwen/Qwen2.5-0.5B-Instruct"],
+        temperatures=[0, 1e-7, 1],
+    ),
     "mixtral-8x22b-it": ExperimentConfig(
         target="mistralai/Mixtral-8x22B-Instruct-v0.1",
         dataset_configs=list(dataset_configs.values()),
@@ -254,6 +263,12 @@ experiment_configs = {
         target="microsoft/phi-4",
         dataset_configs=list(dataset_configs.values()),
         assistants=["microsoft/Phi-3.5-mini-instruct", "Qwen/Qwen2.5-0.5B-Instruct"],
+        temperatures=[0, 1e-7, 1],
+    ),
+    "llama-8b-it": ExperimentConfig(
+        target="meta-llama/Llama-3.1-8B-Instruct",
+        dataset_configs=list(dataset_configs.values()),
+        assistants=["meta-llama/Llama-3.2-3B-Instruct", "meta-llama/Llama-3.2-1B-Instruct", "Qwen/Qwen2.5-0.5B-Instruct"],
         temperatures=[0, 1e-7, 1],
     ),
 }
