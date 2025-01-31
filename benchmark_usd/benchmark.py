@@ -232,10 +232,28 @@ experiment_configs = {
     "llama70b-it": ExperimentConfig(
         target="meta-llama/Llama-3.1-70B-Instruct",
         dataset_configs=list(dataset_configs.values()),
-        assistants=["Qwen/Qwen2.5-0.5B-Instruct", 
-                  "meta-llama/Llama-3.2-1B-Instruct", 
-                  "meta-llama/Llama-3.2-3B-Instruct", 
-                  "meta-llama/Llama-3.1-8B-Instruct"],
+        assistants=["meta-llama/Llama-3.1-8B-Instruct", 
+                    "meta-llama/Llama-3.2-3B-Instruct",
+                    "meta-llama/Llama-3.2-1B-Instruct",
+                    "Qwen/Qwen2.5-0.5B-Instruct"],
+        temperatures=[0, 1e-7, 1],
+    ),
+    "mixtral-8x22b-it": ExperimentConfig(
+        target="mistralai/Mixtral-8x22B-Instruct-v0.1",
+        dataset_configs=list(dataset_configs.values()),
+        assistants=["Qwen/Qwen2.5-0.5B-Instruct", "double7/vicuna-68m"],
+        temperatures=[0, 1e-7, 1],
+    ),
+    "gemma-9b-it": ExperimentConfig(
+        target="google/gemma-2-9b-it",
+        dataset_configs=list(dataset_configs.values()),
+        assistants=["google/gemma-2-2b-it", "double7/vicuna-68m"],
+        temperatures=[0, 1e-7, 1],
+    ),
+    "phi-4": ExperimentConfig(
+        target="microsoft/phi-4",
+        dataset_configs=list(dataset_configs.values()),
+        assistants=["microsoft/Phi-3.5-mini-instruct", "Qwen/Qwen2.5-0.5B-Instruct"],
         temperatures=[0, 1e-7, 1],
     ),
 }
