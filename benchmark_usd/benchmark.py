@@ -271,6 +271,12 @@ experiment_configs = {
         assistants=["meta-llama/Llama-3.2-3B-Instruct", "meta-llama/Llama-3.2-1B-Instruct", "Qwen/Qwen2.5-0.5B-Instruct"],
         temperatures=[0, 1e-7, 1],
     ),
+    "codellama-13b-it": ExperimentConfig(
+        target="codellama/CodeLlama-13b-Instruct-hf",
+        dataset_configs=list(dataset_configs.values()),
+        assistants=["codellama/CodeLlama-7b-Instruct-hf", "bigcode/tiny_starcoder_py"],
+        temperatures=[0, 1e-7, 1],
+    ),
 }
 
 @dataclass
