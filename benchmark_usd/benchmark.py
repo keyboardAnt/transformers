@@ -11,7 +11,7 @@ load_dotenv()
 import argparse
 import gc
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, astuple
 from pprint import pprint
 from threading import Thread
 from typing import Dict, List, Optional
@@ -24,7 +24,6 @@ from datasets import load_dataset
 from huggingface_hub import login
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers.cache_utils import OffloadedStaticCache
 from transformers.generation.streamers import BaseStreamer
 
 
@@ -198,7 +197,6 @@ class Result:
     """
     A class to store the results of a generation experiment.
     """
-
     tok_ids_prompt: List[int]
     tok_ids_new: List[int]
     prompt_text: str
@@ -206,6 +204,43 @@ class Result:
     total_gen_time_s: float
     ttft_s: float
     tpot_s: float
+
+
+@dataclass
+class WandbRow:
+    target: str
+    dataset_path: str
+    dataset_name: str
+    dataset_split: str
+    num_of_examples: int
+    drafter: str
+    temperature: float
+    example_id: int
+    prompt: str
+    new_text: str
+    num_toks: int
+    ttft_ms: float
+    tpot_ms: float
+    out_toks_per_sec: float
+
+    @classmethod
+    def from_result(cls, target: str, dataset_path: str, dataset_name: str, dataset_split: str, num_of_examples: int, drafter: str, example_id: int, temperature: float, result: Result) -> "WandbRow":
+        return cls(
+            target=target,
+            dataset_path=dataset_path,
+            dataset_name=dataset_name,
+            dataset_split=dataset_split,
+            num_of_examples=num_of_examples,
+            drafter=drafter,
+            example_id=example_id,
+            temperature=temperature,
+            prompt=result.prompt_text,
+            new_text=result.new_text,
+            num_toks=len(result.tok_ids_new),
+            ttft_ms=result.ttft_s * 1000,
+            tpot_ms=result.tpot_s * 1000,
+            out_toks_per_sec=1 / result.tpot_s,
+        )
 
 
 class HFModel:
@@ -407,21 +442,7 @@ def generate_assisted(
     do_sample: bool = temperature != 0.0
     if do_sample is True:
         generate_kwargs["temperature"] = temperature
-    result: Result = target_model_obj.generate_text(prompt=prompt, do_sample=do_sample, **generate_kwargs)
-    # report a row in the table to W&B
-    wandb.log(
-        {
-            "Prompt": prompt,
-            "Drafter": assistant_model_obj.model_name if assistant_model_obj is not None else "N/A (AR)",
-            "Temperature": temperature,
-            "New Toks": len(result.tok_ids_new),
-            "TTFT (ms)": result.ttft_s * 1000,
-            "TPOT (ms)": result.tpot_s * 1000,
-            "OutToks/Sec": 1 / result.tpot_s,
-        },
-        step=example_id,
-    )
-    return result
+    return target_model_obj.generate_text(prompt=prompt, do_sample=do_sample, **generate_kwargs)
 
 
 # ------------------------------------------------------------------------------
@@ -468,21 +489,31 @@ def main():
     # dataset_name = "3.0.0"
     # dataset_split = "validation"
 
-    wandb.init({
-        "project": "llm-benchmarks",
-        "config": {
+    wandb_run = wandb.init(
+        project="llm-benchmarks",
+        config={
             "target": target_model_checkpoint,
             "dataset_path": dataset_path,
             "dataset_name": dataset_name,
             "dataset_split": dataset_split,
             "num_of_examples": args.num_of_examples,
         },
-        "tags": [
+        tags=[
             f"target:{target_model_checkpoint}",
             f"dataset:{dataset_path}/{dataset_name}/{dataset_split}",
             f"num_of_examples:{args.num_of_examples}",
-        ]
-    })
+        ],
+        name=f"{target_model_checkpoint}-{dataset_path}-{dataset_name}-{dataset_split}-{args.num_of_examples}-{'-'.join(assistant_checkpoint for assistant_checkpoint in assistants_checkpoints)}",
+    )
+    wandb_artifact = wandb.Artifact(
+        name="benchmark_results_per_example", 
+        type="dataset"
+    )
+    columns = list(WandbRow.__dataclass_fields__.keys())
+    wandb_table = wandb.Table(columns=columns)
+    print(f"{wandb_table=}", flush=True)
+    wandb_artifact.add(wandb_table, "my_table")
+    wandb_run.log_artifact(wandb_artifact)
 
     print("=" * 100, flush=True)
     print(f"{locals()=}", flush=True)
@@ -522,11 +553,35 @@ def main():
         ar_do_sample_false_result = generate_assisted(
             example_id=i, prompt=prompt, temperature=0.0, target_model_obj=target_model_obj
         )
+        wandb_row = WandbRow.from_result(
+            target=target_model_checkpoint,
+            dataset_path=dataset_path,
+            dataset_name=dataset_name,
+            dataset_split=dataset_split,
+            num_of_examples=args.num_of_examples,
+            drafter=assistant_hom_checkpoint,
+            example_id=i,
+            temperature=0.0,
+            result=ar_do_sample_false_result,
+        )
+        wandb_table.add_data(*astuple(wandb_row))
 
         print(f"Running AR with `temp=1.0` for {target_model_checkpoint}...", flush=True)
         ar_do_sample_true_result = generate_assisted(
             example_id=i, prompt=prompt, temperature=1.0, target_model_obj=target_model_obj
         )
+        wandb_row = WandbRow.from_result(
+            target=target_model_checkpoint,
+            dataset_path=dataset_path,
+            dataset_name=dataset_name,
+            dataset_split=dataset_split,
+            num_of_examples=args.num_of_examples,
+            drafter=assistant_hom_checkpoint,
+            example_id=i,
+            temperature=1.0,
+            result=ar_do_sample_true_result,
+        )
+        wandb_table.add_data(*astuple(wandb_row))
 
         print(f"Running SLEM (assisted generation with `temp=0.0`) for {target_model_checkpoint} with {assistant_het_checkpoint}...", flush=True)
         slem_result = generate_assisted(
@@ -536,6 +591,18 @@ def main():
             temperature=0.0,
             assistant_model_obj=assistant_het_obj,
         )
+        wandb_row = WandbRow.from_result(
+            target=target_model_checkpoint,
+            dataset_path=dataset_path,
+            dataset_name=dataset_name,
+            dataset_split=dataset_split,
+            num_of_examples=args.num_of_examples,
+            drafter=assistant_het_checkpoint,
+            example_id=i,
+            temperature=0.0,
+            result=slem_result,
+        )
+        wandb_table.add_data(*astuple(wandb_row))
 
         print(f"Running TLI (assisted generation with `temp=1e-7`) for {target_model_checkpoint} with {assistant_het_checkpoint}...", flush=True)
         tli_do_sample_false_result = generate_assisted(
@@ -545,6 +612,18 @@ def main():
             temperature=1e-7,
             assistant_model_obj=assistant_het_obj,
         )
+        wandb_row = WandbRow.from_result(
+            target=target_model_checkpoint,
+            dataset_path=dataset_path,
+            dataset_name=dataset_name,
+            dataset_split=dataset_split,
+            num_of_examples=args.num_of_examples,
+            drafter=assistant_het_checkpoint,
+            example_id=i,
+            temperature=1e-7,
+            result=tli_do_sample_false_result,
+        )
+        wandb_table.add_data(*astuple(wandb_row))
 
         print(f"Running TLI (assisted generation with `temp=1.0`) for {target_model_checkpoint} with {assistant_het_checkpoint}...", flush=True)
         tli_do_sample_true_result = generate_assisted(
@@ -554,6 +633,18 @@ def main():
             temperature=1.0,
             assistant_model_obj=assistant_het_obj,
         )
+        wandb_row = WandbRow.from_result(
+            target=target_model_checkpoint,
+            dataset_path=dataset_path,
+            dataset_name=dataset_name,
+            dataset_split=dataset_split,
+            num_of_examples=args.num_of_examples,
+            drafter=assistant_het_checkpoint,
+            example_id=i,
+            temperature=1.0,
+            result=tli_do_sample_true_result,
+        )
+        wandb_table.add_data(*astuple(wandb_row))
 
         print(f"Running SD (assisted generation with `temp=0.0`) for {target_model_checkpoint} with {assistant_hom_checkpoint}...", flush=True)
         sd_do_sample_false_result = generate_assisted(
@@ -563,6 +654,18 @@ def main():
             temperature=0.0,
             assistant_model_obj=assistant_hom_obj,
         )
+        wandb_row = WandbRow.from_result(
+            target=target_model_checkpoint,
+            dataset_path=dataset_path,
+            dataset_name=dataset_name,
+            dataset_split=dataset_split,
+            num_of_examples=args.num_of_examples,
+            drafter=assistant_hom_checkpoint,
+            example_id=i,
+            temperature=0.0,
+            result=sd_do_sample_false_result,
+        )
+        wandb_table.add_data(*astuple(wandb_row))
 
         print(f"Running SD (assisted generation with `temp=1.0`) for {target_model_checkpoint} with {assistant_hom_checkpoint}...", flush=True)
         sd_do_sample_true_result = generate_assisted(
@@ -572,6 +675,18 @@ def main():
             temperature=1.0,
             assistant_model_obj=assistant_hom_obj,
         )
+        wandb_row = WandbRow.from_result(
+            target=target_model_checkpoint,
+            dataset_path=dataset_path,
+            dataset_name=dataset_name,
+            dataset_split=dataset_split,
+            num_of_examples=args.num_of_examples,
+            drafter=assistant_hom_checkpoint,
+            example_id=i,
+            temperature=1.0,
+            result=sd_do_sample_true_result,
+        )
+        wandb_table.add_data(*astuple(wandb_row))
 
         # Collect results
         results.append(
@@ -642,6 +757,8 @@ def main():
     os.makedirs(os.path.dirname(filename_results), exist_ok=True)
     df_results.to_csv(filename_results, index=False)
     print(f"Results saved to {filename_results}", flush=True)
+
+    wandb_run.finish()
 
 
 if __name__ == "__main__":
