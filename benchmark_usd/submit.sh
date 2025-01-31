@@ -1,6 +1,8 @@
 #! /bin/bash
 
-timestamp=$(date +\%Y\%m\%d_\%H\%M\%S) && bsub -q "long-gpu short-gpu risk-gpu" \
+timestamp=$(date +\%Y\%m\%d_\%H\%M\%S) && bsub \
+    -N \
+    -q "long-gpu short-gpu risk-gpu" \
     -gpu "num=1:j_exclusive=yes:gmem=80GB" \
     -R "rusage[mem=200GB]" \
     -R "affinity[core(8)]" \
