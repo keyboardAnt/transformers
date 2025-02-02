@@ -282,6 +282,15 @@ experiment_configs = {
         assistants=["codellama/CodeLlama-7b-Instruct-hf", "bigcode/tiny_starcoder_py"],
         temperatures=[0, 1e-7, 1],
     ),
+    "deepseek-r1-qwen-32b": ExperimentConfig(
+        target="deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
+        dataset_configs=[
+            DatasetConfig.from_path("tau/scrolls"),
+            DatasetConfig.from_path("cnn_dailymail"),
+        ],
+        assistants=["deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"],
+        temperatures=[0, 1],
+    ),
 }
 
 @dataclass
@@ -359,6 +368,16 @@ class HFModel:
         self.model_name = model_name
         self.model = AutoModelForCausalLM.from_pretrained(model_name, device_map=device_map, torch_dtype=torch_dtype)
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+
+    def __del__(self):
+        """
+        Clean up model resources when the object is deleted.
+        """
+        if hasattr(self, 'model'):
+            del self.model
+        if hasattr(self, 'tokenizer'):
+            del self.tokenizer
+        clear_memory()
 
     def generate_text(self, prompt: str, do_sample: bool, max_new_tokens: int = 512, **kwargs) -> Result:
         """
@@ -627,48 +646,52 @@ def main():
         for assistant_checkpoint in tqdm(assistant_checkpoints, desc="Assistants", position=1, leave=True, ascii=True, file=sys.stdout):
             print(f"Loading assistant model {assistant_checkpoint}...", flush=True)
             assistant_obj = None if assistant_checkpoint is None else HFModel(assistant_checkpoint)
-            for temperature in tqdm(experiment_config.temperatures, desc="Temperatures", position=2, leave=True, ascii=True, file=sys.stdout):
-                # Generation loop
-                results: List[Dict[str, float]] = []
-                for example_id, example in tqdm(enumerate(dataset_sample), desc="Examples", position=3, leave=True, ascii=True, file=sys.stdout):
-                    # Get prompt
-                    match dataset_path:
-                        case "tau/scrolls":
-                            prompt = f"Summarize the following text:\n{example['input']}\nSummary:\n"
-                        case "cnn_dailymail":
-                            prompt = f"Summarize the following article:\n{example['article']}\nSummary:\n"
-                        case "openai/openai_humaneval":
-                            prompt = f"Implement the function so that it passes the tests.\nTests:\n{example['test']}\nFunction:\n{example['prompt']}\n\nYour code:\n"
-                        case _:
-                            raise ValueError(f"Unknown dataset path: {dataset_path}")
+            try:
+                for temperature in tqdm(experiment_config.temperatures, desc="Temperatures", position=2, leave=True, ascii=True, file=sys.stdout):
+                    # Generation loop
+                    for example_id, example in tqdm(enumerate(dataset_sample), desc="Examples", position=3, leave=True, ascii=True, file=sys.stdout):
+                        # Get prompt
+                        match dataset_path:
+                            case "tau/scrolls":
+                                prompt = f"Summarize the following text:\n{example['input']}\nSummary:\n"
+                            case "cnn_dailymail":
+                                prompt = f"Summarize the following article:\n{example['article']}\nSummary:\n"
+                            case "openai/openai_humaneval":
+                                prompt = f"Implement the function so that it passes the tests.\nTests:\n{example['test']}\nFunction:\n{example['prompt']}\n\nYour code:\n"
+                            case _:
+                                raise ValueError(f"Unknown dataset path: {dataset_path}")
 
-                    # Run generation
-                    print("=" * 100, flush=True)
-                    print(f"Running input prompt {example_id}...", flush=True)
-                    print("Prompt:\n", prompt, flush=True)
-                    print("=" * 100, flush=True)
+                        # Run generation
+                        print("=" * 100, flush=True)
+                        print(f"Running input prompt {example_id}...", flush=True)
+                        print("Prompt:\n", prompt, flush=True)
+                        print("=" * 100, flush=True)
 
-                    print(f"Running `assistant={assistant_checkpoint}` with `temp={temperature}` for {target_checkpoint}...", flush=True)
-                    result = generate_assisted(
-                        example_id=example_id,
-                        prompt=prompt,
-                        target_model_obj=target_obj,
-                        temperature=temperature,
-                        assistant_model_obj=assistant_obj,
-                    )
-                    results_table_row = ResultsTableRow.from_experiment_config_and_result(
-                        target=target_checkpoint,
-                        dataset_path=dataset_path,
-                        dataset_name=dataset_name,
-                        dataset_split=dataset_split,
-                        num_of_examples=args.num_of_examples,
-                        drafter=assistant_checkpoint,
-                        temperature=temperature,
-                        example_id=example_id,
-                        result=result,
-                    )
-                    wandb_table.add_data(*astuple(results_table_row))
-                    df_results = pd.concat([df_results, pd.DataFrame([results_table_row])], ignore_index=True)
+                        print(f"Running `assistant={assistant_checkpoint}` with `temp={temperature}` for {target_checkpoint}...", flush=True)
+                        result = generate_assisted(
+                            example_id=example_id,
+                            prompt=prompt,
+                            target_model_obj=target_obj,
+                            temperature=temperature,
+                            assistant_model_obj=assistant_obj,
+                        )
+                        results_table_row = ResultsTableRow.from_experiment_config_and_result(
+                            target=target_checkpoint,
+                            dataset_path=dataset_path,
+                            dataset_name=dataset_name,
+                            dataset_split=dataset_split,
+                            num_of_examples=args.num_of_examples,
+                            drafter=assistant_checkpoint,
+                            temperature=temperature,
+                            example_id=example_id,
+                            result=result,
+                        )
+                        wandb_table.add_data(*astuple(results_table_row))
+                        df_results = pd.concat([df_results, pd.DataFrame([results_table_row])], ignore_index=True)
+            finally:
+                if assistant_obj is not None:
+                    del assistant_obj
+                    clear_memory()
 
     wandb_run.log_artifact(wandb_artifact)
     wandb_run.log({"results": wandb.Table(dataframe=df_results)})
