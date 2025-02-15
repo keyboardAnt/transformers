@@ -619,7 +619,25 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
 
 class AssistantToTargetTranslator:
     """
-    Translate the assistant into the target universe.
+    Translates token ids and logits between assistant and target model vocabularies. This class is used to handle
+    vocabulary mismatches when using different tokenizers for the assistant and target models in speculative decoding,
+    as introduced in the paper "Lossless Speculative Decoding Algorithms for Heterogeneous Vocabularies"
+    (https://www.arxiv.org/abs/2502.05202).
+    It maintains mappings between the two vocabularies and handles token/logit conversion.
+
+    Args:
+        target_tokenizer (`PreTrainedTokenizerBase`):
+            The tokenizer used by the target (main) model.
+        assistant_tokenizer (`PreTrainedTokenizerBase`):
+            The tokenizer used by the assistant model.
+        assistant_model_device (`str`, defaults to "cpu"):
+            The device where the assistant model is located. Used for placing tensors.
+        target_vocab_size (`int`, *optional*):
+            The size of the target model's vocabulary. If not provided, will be inferred from the target tokenizer.
+        filter_value (`float`, defaults to -float("Inf")):
+            The value used to filter out unmapped tokens in the logits.
+        suppress_tokens_id (`int`, defaults to -1):
+            The ID used to mark suppressed tokens in the mapping.
     """
 
     def __init__(
