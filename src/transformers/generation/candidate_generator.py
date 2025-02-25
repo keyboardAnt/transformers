@@ -27,11 +27,7 @@ if is_sklearn_available():
 
 from ..cache_utils import DynamicCache
 from ..pytorch_utils import isin_mps_friendly
-from .logits_process import (
-    LogitsProcessorList,
-    MinLengthLogitsProcessor,
-    SuppressTokensLogitsProcessor
-)
+from .logits_process import LogitsProcessorList, MinLengthLogitsProcessor, SuppressTokensLogitsProcessor
 
 
 if TYPE_CHECKING:
@@ -614,6 +610,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
 
         return new_target_ids
 
+
 class AssistantToTargetTranslator:
     """
     Translates token ids and logits between assistant and target model vocabularies. This class is used to handle
@@ -731,6 +728,7 @@ class AssistantToTargetTranslator:
         target_logits[..., target_logits_supported_indices] = valid_assistant_logits[..., assistant_indices_mask]
 
         return target_logits
+
 
 class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentTokenizers):
     """

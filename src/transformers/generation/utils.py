@@ -52,13 +52,13 @@ from ..utils import (
 from .beam_constraints import DisjunctiveConstraint, PhrasalConstraint
 from .beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
 from .candidate_generator import (
+    AssistantToTargetTranslator,
     AssistedCandidateGenerator,
     AssistedCandidateGeneratorDifferentTokenizers,
     CandidateGenerator,
     EarlyExitCandidateGenerator,
     PromptLookupCandidateGenerator,
     UniversalSpeculativeDecodingGenerator,
-    AssistantToTargetTranslator,
     _crop_past_key_values,
     _prepare_attention_mask,
     _prepare_token_type_ids,

@@ -7,9 +7,11 @@ from unittest.mock import MagicMock
 import torch
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
-from transformers.generation.candidate_generator import UniversalSpeculativeDecodingGenerator, AssistantToTargetTranslator
+from transformers.generation.candidate_generator import (
+    AssistantToTargetTranslator,
+    UniversalSpeculativeDecodingGenerator,
+)
 from transformers.generation.utils import AssistantVocabTranslatorCache
-
 from transformers.testing_utils import torch_device
 
 
@@ -252,7 +254,7 @@ class TestUniversalSpeculativeDecoding(unittest.TestCase):
             target_tokenizer=self.main_tokenizer,
             assistant_tokenizer=self.assistant_tokenizer,
             generation_config=self.generation_config,
-            model_kwargs=self.model_kwargs
+            model_kwargs=self.model_kwargs,
         )
 
     def test_basic_generation(self):
